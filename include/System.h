@@ -106,6 +106,9 @@ public:
     // See format details at: http://www.cvlibs.net/datasets/kitti/eval_odometry.php
     void SaveTrajectoryKITTI(const string &filename);
 
+    const vector<MapPoint*> GetPoints();
+    const vector<MapPoint*> GetReferencePoints();
+
     // TODO: Save/Load functions
     // SaveMap(const string &filename);
     // LoadMap(const string &filename);

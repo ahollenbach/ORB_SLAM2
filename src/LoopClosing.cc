@@ -42,6 +42,8 @@ LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, 
 {
     mnCovisibilityConsistencyTh = 3;
     mpMatchedKF = NULL;
+
+
 }
 
 void LoopClosing::SetTracker(Tracking *pTracker)
@@ -731,6 +733,9 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
                     pMP->SetWorldPos(Rwc*Xc+twc);
                 }
             }
+
+            // Publish map points
+
 
             mpLocalMapper->Release();
 

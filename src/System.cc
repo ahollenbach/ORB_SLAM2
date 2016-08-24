@@ -25,6 +25,8 @@
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
+#include <octomap/octomap.h>
+#include <octomap/OcTree.h>
 
 namespace ORB_SLAM2
 {
@@ -281,12 +283,11 @@ void System::Shutdown()
     pangolin::BindToContext("ORB-SLAM2: Map Viewer");
 }
 
-void System::SaveTrajectoryTUM(const string &filename)
-{
+void System::SaveTrajectoryTUM(const string &filename) {
     cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
 
-    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
-    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+    vector<KeyFrame *> vpKFs = mpMap->GetAllKeyFrames();
+    sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
 
     // Transform all keyframes so that the first keyframe is at the origin.
     // After a loop closure the first keyframe might not be at the origin.
@@ -302,40 +303,38 @@ void System::SaveTrajectoryTUM(const string &filename)
 
     // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
     // which is true when tracking failed (lbL).
-    list<ORB_SLAM2::KeyFrame*>::iterator lRit = mpTracker->mlpReferences.begin();
+    list<ORB_SLAM2::KeyFrame *>::iterator lRit = mpTracker->mlpReferences.begin();
     list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
     list<bool>::iterator lbL = mpTracker->mlbLost.begin();
-    for(list<cv::Mat>::iterator lit=mpTracker->mlRelativeFramePoses.begin(),
-        lend=mpTracker->mlRelativeFramePoses.end();lit!=lend;lit++, lRit++, lT++, lbL++)
-    {
-        if(*lbL)
+    for (list<cv::Mat>::iterator lit = mpTracker->mlRelativeFramePoses.begin(),
+                 lend = mpTracker->mlRelativeFramePoses.end(); lit != lend; lit++, lRit++, lT++, lbL++) {
+        if (*lbL)
             continue;
 
-        KeyFrame* pKF = *lRit;
+        KeyFrame *pKF = *lRit;
 
-        cv::Mat Trw = cv::Mat::eye(4,4,CV_32F);
+        cv::Mat Trw = cv::Mat::eye(4, 4, CV_32F);
 
         // If the reference keyframe was culled, traverse the spanning tree to get a suitable keyframe.
-        while(pKF->isBad())
-        {
-            Trw = Trw*pKF->mTcp;
+        while (pKF->isBad()) {
+            Trw = Trw * pKF->mTcp;
             pKF = pKF->GetParent();
         }
 
-        Trw = Trw*pKF->GetPose()*Two;
+        Trw = Trw * pKF->GetPose() * Two;
 
-        cv::Mat Tcw = (*lit)*Trw;
-        cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
-        cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+        cv::Mat Tcw = (*lit) * Trw;
+        cv::Mat Rwc = Tcw.rowRange(0, 3).colRange(0, 3).t();
+        cv::Mat twc = -Rwc * Tcw.rowRange(0, 3).col(3);
 
         vector<float> q = Converter::toQuaternion(Rwc);
 
-        f << setprecision(6) << *lT << " " <<  setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " " << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+        f << setprecision(6) << *lT << " " << setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " "
+          << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
     }
     f.close();
     cout << endl << "trajectory saved!" << endl;
 }
-
 
 void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 {
@@ -421,6 +420,16 @@ void System::SaveTrajectoryKITTI(const string &filename)
     }
     f.close();
     cout << endl << "trajectory saved!" << endl;
+}
+
+const vector<MapPoint*> System::GetPoints()
+{
+    return mpMap->GetAllMapPoints();
+}
+
+const vector<MapPoint*> System::GetReferencePoints()
+{
+    return mpMap->GetAllMapPoints();
 }
 
 } //namespace ORB_SLAM
