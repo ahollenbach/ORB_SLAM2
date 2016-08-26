@@ -36,16 +36,21 @@ using namespace std;
 class MonoServer
 {
 public:
-    MonoServer(ORB_SLAM2::System* pSLAM):mpSLAM(pSLAM){}
+    MonoServer(ORB_SLAM2::System* pSLAMcore, ORB_SLAM2::System* pSLAMs[]):mpSLAMserver(pSLAMcore), mpSLAMs(pSLAMs){}
 
-    void GrabImage(const sensor_msgs::ImageConstPtr& msg);
+    void GrabImage(int source, const sensor_msgs::ImageConstPtr& msg);
 
-    ORB_SLAM2::System* mpSLAM;
+    void GrabImage1(const sensor_msgs::ImageConstPtr& msg);
+    void GrabImage2(const sensor_msgs::ImageConstPtr& msg);
+
+
+    ORB_SLAM2::System* mpSLAMserver;
+    ORB_SLAM2::System* mpSLAMs[];
 };
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "Mono");
+    ros::init(argc, argv, "MonoServer");
     ros::start();
 
     if(argc != 3)
@@ -56,12 +61,21 @@ int main(int argc, char **argv)
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+    ORB_SLAM2::System SLAMserver(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
 
-    MonoServer igb(&SLAM);
+    // Make a list of clients
+    const int NUM_CLIENTS = 1; // TODO: don't hardcode
+    ORB_SLAM2::System* SLAMclients = new ORB_SLAM2::System[NUM_CLIENTS];
+
+    for (int i = 0; i < NUM_CLIENTS; ++i) {
+        SLAMclients[i] = ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+    }
+
+    MonoServer igb(&SLAMserver, &SLAMclients);
 
     ros::NodeHandle nodeHandler;
-    ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &MonoServer::GrabImage,&igb);
+    nodeHandler.subscribe("/camera1/image_raw", 1, &MonoServer::GrabImage1,&igb);
+    nodeHandler.subscribe("/camera2/image_raw", 1, &MonoServer::GrabImage2,&igb);
 
     ros::spin();
 
@@ -69,14 +83,25 @@ int main(int argc, char **argv)
     SLAM.Shutdown();
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+//    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     ros::shutdown();
 
     return 0;
 }
 
-void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg)
+// Messy, but let's do this for now to sort where things are coming from
+void MonoServer::GrabImage1(const sensor_msgs::ImageConstPtr& msg)
+{
+    MonoServer::GrabImage(1, msg);
+}
+
+void MonoServer::GrabImage2(const sensor_msgs::ImageConstPtr& msg)
+{
+    MonoServer::GrabImage(2, msg);
+}
+
+void MonoServer::GrabImage(int source, const sensor_msgs::ImageConstPtr& msg)
 {
     // Copy the ros image message to cv::Mat.
     cv_bridge::CvImageConstPtr cv_ptr;
