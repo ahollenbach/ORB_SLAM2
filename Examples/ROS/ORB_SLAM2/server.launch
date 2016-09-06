@@ -3,13 +3,12 @@
     <arg name="vocab_file" default="/home/ahollenbach/catkin_ws/src/ORB_SLAM2/Vocabulary/ORBvoc.txt" />
     <arg name="camera_calib_file" default="/home/ahollenbach/catkin_ws/src/thesis/calib/orb-ar.yaml" />
 
+    <arg name="num_clients" default="1" />
     <arg name="camera1_topic" default="/ardrone/image_raw" />
     <arg name="camera2_topic" default="/camera2/image_raw" />
 
-    camera/image_raw:=/ardrone/image_raw
-
     <node name="mono_server" pkg="ORB_SLAM2" type="MonoServer"
-          output="screen" clear_params="true" args="$(arg vocab_file) $(camera_calib_file) camera1/image_raw:=$(camera1_topic) camera2/image_raw:=$(camera2_topic)">
+          output="screen" clear_params="true" args="$(arg vocab_file) $(arg camera_calib_file) $(arg num_clients) /camera1/image_raw:=$(arg camera1_topic) /camera2/image_raw:=$(arg camera2_topic)">
         <param name="outdoor" value="0" />
     </node>
 </launch>

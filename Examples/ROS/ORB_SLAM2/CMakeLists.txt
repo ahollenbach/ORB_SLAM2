@@ -75,6 +75,15 @@ target_link_libraries(MonoMultiple
 ${LIBS}
 )
 
+# Node for monocular server
+add_executable(MonoServer
+src/mono_multiple_server.cc
+)
+
+target_link_libraries(MonoServer
+${LIBS}
+)
+
 # Node for stereo camera
 add_executable(Stereo
 src/ros_stereo.cc

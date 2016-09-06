@@ -36,16 +36,17 @@ using namespace std;
 class MonoServer
 {
 public:
-    MonoServer(ORB_SLAM2::System* pSLAMcore, ORB_SLAM2::System* pSLAMs[]):mpSLAMserver(pSLAMcore), mpSLAMs(pSLAMs){}
 
-    void GrabImage(int source, const sensor_msgs::ImageConstPtr& msg);
+    MonoServer(ORB_SLAM2::System* pSLAMcore, std::vector<ORB_SLAM2::System*> pSLAMs):mpSLAMserver(pSLAMcore), mpSLAMs(pSLAMs) {}
 
+    void GrabImage(const sensor_msgs::ImageConstPtr& msg, int source);
+
+    // tmp
     void GrabImage1(const sensor_msgs::ImageConstPtr& msg);
     void GrabImage2(const sensor_msgs::ImageConstPtr& msg);
 
-
     ORB_SLAM2::System* mpSLAMserver;
-    ORB_SLAM2::System* mpSLAMs[];
+    std::vector<ORB_SLAM2::System*> mpSLAMs;
 };
 
 int main(int argc, char **argv)
@@ -53,55 +54,76 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "MonoServer");
     ros::start();
 
-    if(argc != 3)
+    int num_clients = 1;
+    if(argc == 4)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 MonoServer path_to_vocabulary path_to_settings" << endl;
+        num_clients = atoi(argv[3]);
+    }
+    else if(argc != 3)
+    {
+        cerr << endl << "Usage: rosrun ORB_SLAM2 MonoServer path_to_vocabulary path_to_settings [num_clients=1]" << endl;
         ros::shutdown();
         return 1;
     }
+
+    cout << "Will initiate " << num_clients << " clients" << endl;
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAMserver(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
 
     // Make a list of clients
-    const int NUM_CLIENTS = 1; // TODO: don't hardcode
-    ORB_SLAM2::System* SLAMclients = new ORB_SLAM2::System[NUM_CLIENTS];
+    std::vector<ORB_SLAM2::System*> SLAMclients(num_clients);
 
-    for (int i = 0; i < NUM_CLIENTS; ++i) {
-        SLAMclients[i] = ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+    for (int i = 0; i < num_clients; ++i)
+    {
+        cout << "Initializing client " << i << endl;
+        SLAMclients[i] = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
     }
 
-    MonoServer igb(&SLAMserver, &SLAMclients);
+    MonoServer server(&SLAMserver, SLAMclients);
 
     ros::NodeHandle nodeHandler;
-    nodeHandler.subscribe("/camera1/image_raw", 1, &MonoServer::GrabImage1,&igb);
-    nodeHandler.subscribe("/camera2/image_raw", 1, &MonoServer::GrabImage2,&igb);
+//    for (int i = 0; i < num_clients; ++i)
+//    {
+//        std::ostringstream o;
+//        o << "/camera" << i << "/image_raw"; // Make topic for each source at /camera<i>/image_raw
+//
+//        // Wrap image fetcher with custom param for the source camera
+////            nodeHandler.subscribe<sensor_msgs::ImageConstPtr>(o.str(), 1, boost::bind(&MonoServer::GrabImage, this, _1, i));
+//        auto fn = i == 0 ? &MonoServer::GrabImage1 : &MonoServer::GrabImage2;
+//
+//        nodeHandler.subscribe(o.str(), 1, fn, &server);
+//    }
+    string topic = "/ardrone/image_raw";
+    nodeHandler.subscribe(topic, 1, &MonoServer::GrabImage1, &server);
+
+    cout << "Subscribing to: " << topic << endl;
 
     ros::spin();
 
     // Stop all threads
-    SLAM.Shutdown();
+    SLAMserver.Shutdown();
 
-    // Save camera trajectory
-//    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+    for (int i = 0; i < num_clients; ++i)
+    {
+        SLAMclients[i]->Shutdown();
+    }
 
     ros::shutdown();
 
     return 0;
 }
 
-// Messy, but let's do this for now to sort where things are coming from
 void MonoServer::GrabImage1(const sensor_msgs::ImageConstPtr& msg)
 {
-    MonoServer::GrabImage(1, msg);
+    GrabImage(msg, 1);
 }
-
 void MonoServer::GrabImage2(const sensor_msgs::ImageConstPtr& msg)
 {
-    MonoServer::GrabImage(2, msg);
+    GrabImage(msg, 2);
 }
 
-void MonoServer::GrabImage(int source, const sensor_msgs::ImageConstPtr& msg)
+void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg, int sourceIdx)
 {
     // Copy the ros image message to cv::Mat.
     cv_bridge::CvImageConstPtr cv_ptr;
@@ -115,7 +137,7 @@ void MonoServer::GrabImage(int source, const sensor_msgs::ImageConstPtr& msg)
         return;
     }
 
-    mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    mpSLAMs[sourceIdx]->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
 }
 
 
