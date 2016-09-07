@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="vocab_file" default="/home/ahollenbach/catkin_ws/src/ORB_SLAM2/Vocabulary/ORBvoc.txt" />
+    <arg name="vocab_file" default="/home/ahollenbach/catkin_ws/src/ORB_SLAM2/Vocabulary/ORBvoc.bin" />
     <arg name="camera_calib_file" default="/home/ahollenbach/catkin_ws/src/thesis/calib/orb-ar.yaml" />
 
     <arg name="num_clients" default="1" />

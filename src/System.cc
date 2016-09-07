@@ -28,6 +28,12 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTree.h>
 #include <X11/Xlib.h>
+#include <time.h>
+
+bool has_suffix(const std::string &str, const std::string &suffix) {
+  std::size_t index = str.find(suffix, str.size() - suffix.size());
+  return (index != std::string::npos);
+}
 
 namespace ORB_SLAM2
 {
@@ -67,15 +73,20 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     if(mpVocabulary->empty())
     {
         cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
+        clock_t tStart = clock();
 
-        bool bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
+        bool bVocLoad = false; // chose loading method based on file extension
+        if (has_suffix(strVocFile, ".txt"))
+            bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
+        else
+            bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
         if(!bVocLoad)
         {
             cerr << "Wrong path to vocabulary. " << endl;
             cerr << "Failed to open at: " << strVocFile << endl;
             exit(-1);
         }
-        cout << "Vocabulary loaded!" << endl << endl;
+        printf("Vocabulary loaded in %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
     }
 
     //Create KeyFrame Database
@@ -217,13 +228,10 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
         cerr << "ERROR: you called TrackMonocular but input sensor was not set to Monocular." << endl;
         exit(-1);
     }
-    cout << "221HERE" << endl;
 
     // Check mode change
     {
-        cout << "225HERE" << endl;
         unique_lock<mutex> lock(mMutexMode);
-        cout << "227HERE" << endl;
 
         if(mbActivateLocalizationMode)
         {
@@ -245,7 +253,6 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
             mbDeactivateLocalizationMode = false;
         }
     }
-    cout << "248HERE" << endl;
 
     // Check reset
     {
@@ -256,7 +263,6 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
         mbReset = false;
     }
     }
-    cout << "HERE" << endl;
 
     return mpTracker->GrabImageMonocular(im,timestamp);
 }
