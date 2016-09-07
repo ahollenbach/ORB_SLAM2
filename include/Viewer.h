@@ -83,6 +83,10 @@ private:
     bool mbStopRequested;
     std::mutex mMutexStop;
 
+    string currentFrameTitle;
+    string mapViewerTitle;
+    string menuName;
+
 };
 
 }

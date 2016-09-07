@@ -25,11 +25,11 @@
 #include<chrono>
 
 #include<ros/ros.h>
-#include <cv_bridge/cv_bridge.h>
+#include<cv_bridge/cv_bridge.h>
 
 #include<opencv2/core/core.hpp>
 
-#include <include/System.h>
+#include<include/System.h>
 
 using namespace std;
 
@@ -40,10 +40,6 @@ public:
     MonoServer(ORB_SLAM2::System* pSLAMcore, std::vector<ORB_SLAM2::System*> pSLAMs):mpSLAMserver(pSLAMcore), mpSLAMs(pSLAMs) {}
 
     void GrabImage(const sensor_msgs::ImageConstPtr& msg, int source);
-
-    // tmp
-    void GrabImage1(const sensor_msgs::ImageConstPtr& msg);
-    void GrabImage2(const sensor_msgs::ImageConstPtr& msg);
 
     ORB_SLAM2::System* mpSLAMserver;
     std::vector<ORB_SLAM2::System*> mpSLAMs;
@@ -66,10 +62,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    cout << "Will initiate " << num_clients << " clients" << endl;
+    cout << "Initiating " << num_clients << " clients" << endl;
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM2::System SLAMserver(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+    // id is an arbitrarily large number
+//    ORB_SLAM2::System SLAMserver(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,1000);
 
     // Make a list of clients
     std::vector<ORB_SLAM2::System*> SLAMclients(num_clients);
@@ -77,32 +74,27 @@ int main(int argc, char **argv)
     for (int i = 0; i < num_clients; ++i)
     {
         cout << "Initializing client " << i << endl;
-        SLAMclients[i] = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+        SLAMclients[i] = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,i);
     }
 
-    MonoServer server(&SLAMserver, SLAMclients);
+//    MonoServer server(&SLAMserver, SLAMclients);
+    MonoServer server(nullptr, SLAMclients);
 
     ros::NodeHandle nodeHandler;
-//    for (int i = 0; i < num_clients; ++i)
-//    {
-//        std::ostringstream o;
-//        o << "/camera" << i << "/image_raw"; // Make topic for each source at /camera<i>/image_raw
-//
-//        // Wrap image fetcher with custom param for the source camera
-////            nodeHandler.subscribe<sensor_msgs::ImageConstPtr>(o.str(), 1, boost::bind(&MonoServer::GrabImage, this, _1, i));
-//        auto fn = i == 0 ? &MonoServer::GrabImage1 : &MonoServer::GrabImage2;
-//
-//        nodeHandler.subscribe(o.str(), 1, fn, &server);
-//    }
-    string topic = "/ardrone/image_raw";
-    nodeHandler.subscribe(topic, 1, &MonoServer::GrabImage1, &server);
+    std::vector<ros::Subscriber> subscribers(num_clients);
+    for (int i = 0; i < num_clients; ++i)
+    {
+        std::ostringstream o;
+        o << "/camera" << i << "/image_raw"; // Make topic for each source at /camera<i>/image_raw
 
-    cout << "Subscribing to: " << topic << endl;
+        subscribers[i] = nodeHandler.subscribe<sensor_msgs::Image>(o.str(), 1, boost::bind(&MonoServer::GrabImage, &server, _1, i));
+        cout << "Client " << i << " subscribing to: " << o.str() << endl;
+    }
 
     ros::spin();
 
     // Stop all threads
-    SLAMserver.Shutdown();
+//    SLAMserver.Shutdown();
 
     for (int i = 0; i < num_clients; ++i)
     {
@@ -112,15 +104,6 @@ int main(int argc, char **argv)
     ros::shutdown();
 
     return 0;
-}
-
-void MonoServer::GrabImage1(const sensor_msgs::ImageConstPtr& msg)
-{
-    GrabImage(msg, 1);
-}
-void MonoServer::GrabImage2(const sensor_msgs::ImageConstPtr& msg)
-{
-    GrabImage(msg, 2);
 }
 
 void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg, int sourceIdx)
@@ -136,7 +119,6 @@ void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg, int sourceIdx)
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return;
     }
-
     mpSLAMs[sourceIdx]->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
 }
 

@@ -34,9 +34,9 @@ namespace ORB_SLAM2
 
 ORBVocabulary* System::mpVocabulary = new ORBVocabulary();
 
-System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
-               const bool bUseViewer):mSensor(sensor),mbReset(false),mbActivateLocalizationMode(false),
-        mbDeactivateLocalizationMode(false)
+System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer,
+               int systemId):systemId(systemId),mSensor(sensor),mbReset(false),mbActivateLocalizationMode(false),
+                                 mbDeactivateLocalizationMode(false)
 {
     // Output welcome message
     cout << endl <<
@@ -217,10 +217,14 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
         cerr << "ERROR: you called TrackMonocular but input sensor was not set to Monocular." << endl;
         exit(-1);
     }
+    cout << "221HERE" << endl;
 
     // Check mode change
     {
+        cout << "225HERE" << endl;
         unique_lock<mutex> lock(mMutexMode);
+        cout << "227HERE" << endl;
+
         if(mbActivateLocalizationMode)
         {
             mpLocalMapper->RequestStop();
@@ -241,6 +245,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
             mbDeactivateLocalizationMode = false;
         }
     }
+    cout << "248HERE" << endl;
 
     // Check reset
     {
@@ -251,6 +256,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
         mbReset = false;
     }
     }
+    cout << "HERE" << endl;
 
     return mpTracker->GrabImageMonocular(im,timestamp);
 }
@@ -436,6 +442,10 @@ const vector<MapPoint*> System::GetPoints()
 const vector<MapPoint*> System::GetReferencePoints()
 {
     return mpMap->GetAllMapPoints();
+}
+
+int System::GetSystemId() {
+    return this->systemId;
 }
 
 } //namespace ORB_SLAM

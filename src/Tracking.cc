@@ -259,7 +259,11 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
     else
         mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
 
+    cout << "4HERE" << endl;
+
     Track();
+
+    cout << "5HERE" << endl;
 
     return mCurrentFrame.mTcw.clone();
 }
