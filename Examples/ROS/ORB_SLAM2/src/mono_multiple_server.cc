@@ -26,10 +26,14 @@
 
 #include<ros/ros.h>
 #include<cv_bridge/cv_bridge.h>
+#include<sensor_msgs/PointCloud.h>
 
 #include<opencv2/core/core.hpp>
 
 #include<include/System.h>
+#include<include/RosContainer.h>
+#include<include/MultiViewer.h>
+#include<include/MultiLoopClosing.h>
 
 using namespace std;
 
@@ -37,12 +41,32 @@ class MonoServer
 {
 public:
 
-    MonoServer(ORB_SLAM2::System* pSLAMcore, std::vector<ORB_SLAM2::System*> pSLAMs):mpSLAMserver(pSLAMcore), mpSLAMs(pSLAMs) {}
+    MonoServer(ORB_SLAM2::MultiLoopClosing* pGlobalLoopCloser, std::vector<ORB_SLAM2::System*> pSLAMs, const string &strSettingsFile):
+            mpGlobalLoopCloser(pGlobalLoopCloser), mpSLAMs(pSLAMs) {
+        viewer = new ORB_SLAM2::MultiViewer(pSLAMs, strSettingsFile);
+        mptViewer = new thread(&ORB_SLAM2::MultiViewer::Run, viewer);
+
+        mptGlobalLoopCLoser = new thread(&ORB_SLAM2::MultiLoopClosing::Run, mpGlobalLoopCloser);
+    }
 
     void GrabImage(const sensor_msgs::ImageConstPtr& msg, int source);
 
-    ORB_SLAM2::System* mpSLAMserver;
+    void Shutdown();
+
+    void SetRosContainers(std::vector<ORB_SLAM2::RosContainer*> containers);
+
+    ORB_SLAM2::MultiLoopClosing* mpGlobalLoopCloser;
+    std::thread* mptGlobalLoopCLoser;
+
     std::vector<ORB_SLAM2::System*> mpSLAMs;
+
+    ORB_SLAM2::MultiViewer* viewer;
+    std::thread* mptViewer;
+
+private:
+    void PublishMapPoints(int idx, unsigned int seq);
+
+    std::vector<ORB_SLAM2::RosContainer*> rosContainers;
 };
 
 int main(int argc, char **argv)
@@ -50,23 +74,25 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "MonoServer");
     ros::start();
 
-    int num_clients = 1;
+    int num_clients = 2;
     if(argc == 4)
     {
         num_clients = atoi(argv[3]);
     }
     else if(argc != 3)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 MonoServer path_to_vocabulary path_to_settings [num_clients=1]" << endl;
+        cerr << endl << "Usage: rosrun ORB_SLAM2 MonoServer path_to_vocabulary path_to_settings [num_clients=2]" << endl;
         ros::shutdown();
         return 1;
     }
 
     cout << "Initiating " << num_clients << " clients" << endl;
 
-    // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    // id is an arbitrarily large number
-//    ORB_SLAM2::System SLAMserver(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,1000);
+    // Some lovely colors
+    vector<ORB_SLAM2::MapDrawer::Color*> colors;
+    colors.push_back(new ORB_SLAM2::MapDrawer::Color(1.0f, 0.0f, 1.0f));
+    colors.push_back(new ORB_SLAM2::MapDrawer::Color(0.0f, 1.0f, 1.0f));
+    colors.push_back(new ORB_SLAM2::MapDrawer::Color(1.0f, 0.0f, 0.0f));
 
     // Make a list of clients
     std::vector<ORB_SLAM2::System*> SLAMclients(num_clients);
@@ -74,33 +100,36 @@ int main(int argc, char **argv)
     for (int i = 0; i < num_clients; ++i)
     {
         cout << "Initializing client " << i << endl;
-        SLAMclients[i] = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,i);
+        SLAMclients[i] = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,false,i);
+        SLAMclients[i]->mpMapDrawer->SetPointColor(colors[i%colors.size()]);
     }
 
-//    MonoServer server(&SLAMserver, SLAMclients);
-    MonoServer server(nullptr, SLAMclients);
+    ORB_SLAM2::MultiLoopClosing* pGlobalLoopCloser = new ORB_SLAM2::MultiLoopClosing(SLAMclients, false);
+
+    MonoServer server(pGlobalLoopCloser, SLAMclients, argv[2]);
 
     ros::NodeHandle nodeHandler;
+    std::vector<ORB_SLAM2::RosContainer*> containers(num_clients);
     std::vector<ros::Subscriber> subscribers(num_clients);
     for (int i = 0; i < num_clients; ++i)
     {
+        // Construct topics for each client
+        //  - Incoming feed will be read at /camera<i>/image_raw
+        //  - Outgoing cloud is at /orb<i>/cloud
         std::ostringstream o;
-        o << "/camera" << i << "/image_raw"; // Make topic for each source at /camera<i>/image_raw
+        o << "/camera" << i << "/image_raw";
 
         subscribers[i] = nodeHandler.subscribe<sensor_msgs::Image>(o.str(), 1, boost::bind(&MonoServer::GrabImage, &server, _1, i));
         cout << "Client " << i << " subscribing to: " << o.str() << endl;
+
+        containers[i] = new ORB_SLAM2::RosContainer(i, &nodeHandler, pGlobalLoopCloser);
     }
+
+    server.SetRosContainers(containers);
 
     ros::spin();
 
-    // Stop all threads
-//    SLAMserver.Shutdown();
-
-    for (int i = 0; i < num_clients; ++i)
-    {
-        SLAMclients[i]->Shutdown();
-    }
-
+    server.Shutdown();
     ros::shutdown();
 
     return 0;
@@ -120,6 +149,71 @@ void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg, int sourceIdx)
         return;
     }
     mpSLAMs[sourceIdx]->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+
+    PublishMapPoints(sourceIdx, cv_ptr->header.seq);
+
+}
+
+void MonoServer::Shutdown()
+{
+    mpGlobalLoopCloser->RequestFinish();
+    viewer->RequestFinish();
+
+    for (std::size_t i = 0, max = mpSLAMs.size(); i < max; ++i)
+    {
+        mpSLAMs[i]->Shutdown();
+    }
+
+    // Wait until all thread have effectively stopped
+    while(!mpGlobalLoopCloser->isFinished() || !viewer->isFinished())
+    {
+        usleep(5000);
+    }
+
+    pangolin::BindToContext("ORB-SLAM2: Map MultiViewer"); // Why?
 }
 
 
+void MonoServer::PublishMapPoints(int idx, unsigned int seq) {
+    // Get points and publish them
+    const vector<ORB_SLAM2::MapPoint*> vpMPs = mpSLAMs[idx]->GetPoints();
+    const vector<ORB_SLAM2::MapPoint*> &vpRefMPs = mpSLAMs[idx]->GetReferencePoints();
+    set<ORB_SLAM2::MapPoint*> spRefMPs(vpRefMPs.begin(), vpRefMPs.end());
+
+    vector<geometry_msgs::Point32> points;
+    for(size_t i=0, iend=vpMPs.size(); i<iend;i++)
+    {
+//        cout << "Point is bad: " << vpMPs[i]->isBad() << endl;
+//        if(vpMPs[i]->isBad() || spRefMPs.count(vpMPs[i]))
+//            continue;
+        cv::Mat pos = vpMPs[i]->GetWorldPos();
+        geometry_msgs::Point32 point;
+        point.x = pos.at<float>(0);
+        point.y = pos.at<float>(1);
+        point.z = pos.at<float>(2);
+        points.push_back(point);
+    }
+
+    sensor_msgs::PointCloud pointCloudMsg;
+    pointCloudMsg.header.stamp = ros::Time::now();
+    if(idx == 1)
+    {
+        pointCloudMsg.header.frame_id = "0to1";
+    } else
+    {
+        pointCloudMsg.header.frame_id = "world";
+    }
+    pointCloudMsg.header.seq = seq;
+    pointCloudMsg.points = points;
+
+    rosContainers[idx]->pointCloudPublisher.publish(pointCloudMsg);
+}
+
+void MonoServer::SetRosContainers(std::vector<ORB_SLAM2::RosContainer*> containers)
+{
+    rosContainers = containers;
+
+    for(size_t i=0, iend=mpSLAMs.size(); i<iend;i++) {
+        mpSLAMs[i]->SetRosContainer(rosContainers[i]);
+    }
+}

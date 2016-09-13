@@ -18,21 +18,21 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef LOOPCLOSING_H
-#define LOOPCLOSING_H
+#ifndef MULTI_LOOPCLOSING_H
+#define MULTI_LOOPCLOSING_H
 
 #include "KeyFrame.h"
 #include "LocalMapping.h"
 #include "Map.h"
 #include "ORBVocabulary.h"
 #include "Tracking.h"
-#include "RosContainer.h"
 
 #include "KeyFrameDatabase.h"
 
 #include <thread>
 #include <mutex>
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
+#include <tf/transform_broadcaster.h>
 
 namespace ORB_SLAM2
 {
@@ -40,10 +40,10 @@ namespace ORB_SLAM2
 class Tracking;
 class LocalMapping;
 class KeyFrameDatabase;
-class RosContainer;
+class System;
 
 
-class LoopClosing
+class MultiLoopClosing
 {
 public:
 
@@ -53,16 +53,12 @@ public:
 
 public:
 
-    LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale);
-
-    void SetTracker(Tracking* pTracker);
-
-    void SetLocalMapper(LocalMapping* pLocalMapper);
+    MultiLoopClosing(vector<System*> pSystems,const bool bFixScale);
 
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame *pKF);
+    void InsertKeyFrame(int sourceId, KeyFrame *pKF);
 
     void RequestReset();
 
@@ -82,13 +78,13 @@ public:
 
     bool isFinished();
 
-    void SetRosContainer(RosContainer* rosContainer);
 
 protected:
 
     bool CheckNewKeyFrames();
 
     bool DetectLoop();
+    bool DetectLoop(int sourceSystemIdx, int comparisonSystemIdx);
 
     bool ComputeSim3();
 
@@ -106,15 +102,9 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
-    Map* mpMap;
-    Tracking* mpTracker;
+    vector<System*> mpSystems;
 
-    KeyFrameDatabase* mpKeyFrameDB;
-    ORBVocabulary* mpORBVocabulary;
-
-    LocalMapping *mpLocalMapper;
-
-    std::list<KeyFrame*> mlpLoopKeyFrameQueue;
+    std::vector<std::list<KeyFrame*>> mlpLoopKeyFrameQueues;
 
     std::mutex mMutexLoopQueue;
 
@@ -144,9 +134,9 @@ protected:
     // Fix scale in the stereo/RGB-D case
     bool mbFixScale;
 
-    RosContainer* rosContainer;
+    tf::Transform g2o2TF(const g2o::Sim3 sim3);
 };
 
 } //namespace ORB_SLAM
 
-#endif // LOOPCLOSING_H
+#endif // MULTI_LOOPCLOSING_H

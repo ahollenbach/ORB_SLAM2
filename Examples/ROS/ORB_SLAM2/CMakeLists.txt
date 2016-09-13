@@ -35,6 +35,7 @@ find_package(OpenCV 2.4.3 REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(octomap REQUIRED)
+find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 
 catkin_package()
 
@@ -44,6 +45,7 @@ ${PROJECT_SOURCE_DIR}/../../../
 ${PROJECT_SOURCE_DIR}/../../../include
 ${Pangolin_INCLUDE_DIRS}
 ${OCTOMAP_INCLUDE_DIRS}
+${PCL_INCLUDE_DIRS}
 )
 
 set(LIBS
@@ -52,6 +54,7 @@ ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
 ${Pangolin_LIBRARIES}
 ${OCTOMAP_LIBRARIES}
+${PCL_LIBRARY_DIRS}
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/g2o/lib/libg2o.so
 ${PROJECT_SOURCE_DIR}/../../../lib/libORB_SLAM2.so

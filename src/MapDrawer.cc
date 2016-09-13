@@ -39,6 +39,7 @@ MapDrawer::MapDrawer(Map* pMap, const string &strSettingPath):mpMap(pMap)
     mCameraSize = fSettings["Viewer.CameraSize"];
     mCameraLineWidth = fSettings["Viewer.CameraLineWidth"];
 
+    pointColor = new Color(1.0f, 0.0f, 0.0f); // Red by default
 }
 
 void MapDrawer::DrawMapPoints()
@@ -53,7 +54,7 @@ void MapDrawer::DrawMapPoints()
 
     glPointSize(mPointSize);
     glBegin(GL_POINTS);
-    glColor3f(0.0,0.0,0.0);
+    SetGlColor3f(pointColor, true);
 
     for(size_t i=0, iend=vpMPs.size(); i<iend;i++)
     {
@@ -66,7 +67,7 @@ void MapDrawer::DrawMapPoints()
 
     glPointSize(mPointSize);
     glBegin(GL_POINTS);
-    glColor3f(1.0,0.0,0.0);
+    SetGlColor3f(pointColor, false);
 
     for(set<MapPoint*>::iterator sit=spRefMPs.begin(), send=spRefMPs.end(); sit!=send; sit++)
     {
@@ -78,6 +79,21 @@ void MapDrawer::DrawMapPoints()
     }
 
     glEnd();
+}
+
+void MapDrawer::SetPointColor(Color* color) {
+    pointColor = color;
+}
+
+void MapDrawer::SetGlColor3f(Color* c, bool darker)
+{
+    if (darker)
+    {
+        glColor3f(c->r/2, c->g/2, c->b/2);
+    } else
+    {
+        glColor3f(c->r, c->g, c->b);
+    }
 }
 
 void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph)
@@ -100,7 +116,8 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph)
             glMultMatrixf(Twc.ptr<GLfloat>(0));
 
             glLineWidth(mKeyFrameLineWidth);
-            glColor3f(0.0f,0.0f,1.0f);
+//            glColor3f(0.0f,0.0f,1.0f);
+            glColor3f(0.0f, 0.43f, 0.56f); // dark blue
             glBegin(GL_LINES);
             glVertex3f(0,0,0);
             glVertex3f(w,h,z);
@@ -191,7 +208,8 @@ void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 #endif
 
     glLineWidth(mCameraLineWidth);
-    glColor3f(0.0f,1.0f,0.0f);
+//    glColor3f(0.0f,1.0f,0.0f);
+    glColor3f(0.25f, 0.73f, 0.85f); // light blue
     glBegin(GL_LINES);
     glVertex3f(0,0,0);
     glVertex3f(w,h,z);

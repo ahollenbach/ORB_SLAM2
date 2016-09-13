@@ -31,5 +31,6 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j
 cd ..
 
-echo "Converting vocabulary to binary"
-./tools/bin_vocabulary
+# Don't do this every time
+#echo "Converting vocabulary to binary"
+#./tools/bin_vocabulary

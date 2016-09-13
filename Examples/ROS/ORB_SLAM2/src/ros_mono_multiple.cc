@@ -106,7 +106,7 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     if (pose.empty())
         return;
 
-    PublishCameraPoseTf(pose);
+//    PublishCameraPoseTf(pose);
     PublishMapPoints(cv_ptr->header.seq);
 
 //    cv::Mat Rwc = mTcw.rowRange(0,3).colRange(0,3).t();
@@ -119,55 +119,6 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
 //    tf::Transform tfTcw(M,V);
 //
 //    tf::Quaternion Q = tfTcw.getRotation();
-}
-
-void ImageGrabber::PublishCameraPoseTf(cv::Mat pose) {
-    // From https://github.com/Thomas00010111/ORB_SLAM2/blob/29f5bfdaccc420f3e3175180839ddea4c46353a7/Examples/ROS/ORB_SLAM2/src/ros_rgbd.cc
-    /* global left handed coordinate system */
-    static cv::Mat pose_prev = cv::Mat::eye(4,4, CV_32F);
-    static cv::Mat world_lh = cv::Mat::eye(4,4, CV_32F);
-    // matrix to flip signs of sinus in rotation matrix, not sure why we need to do that
-    static const cv::Mat flipSign = (cv::Mat_<float>(4,4) <<   1,-1,-1, 1,
-            -1, 1,-1, 1,
-            -1,-1, 1, 1,
-            1, 1, 1, 1);
-
-    //prev_pose * T = pose
-    cv::Mat translation =  (pose * pose_prev.inv()).mul(flipSign);
-    world_lh = world_lh * translation;
-    pose_prev = pose.clone();
-
-    /* transform into global right handed coordinate system, publish in ROS*/
-    tf::Matrix3x3 cameraRotation_rh(  - world_lh.at<float>(0,0),   world_lh.at<float>(0,1),   world_lh.at<float>(0,2),
-                                      - world_lh.at<float>(1,0),   world_lh.at<float>(1,1),   world_lh.at<float>(1,2),
-                                      world_lh.at<float>(2,0), - world_lh.at<float>(2,1), - world_lh.at<float>(2,2));
-
-    tf::Vector3 cameraTranslation_rh( world_lh.at<float>(0,3),world_lh.at<float>(1,3), - world_lh.at<float>(2,3) );
-
-    //rotate 270deg about x and 270deg about x to get ENU: x forward, y left, z up
-    const tf::Matrix3x3 rotation270degXZ(   0, 1, 0,
-                                            0, 0, 1,
-                                            1, 0, 0);
-
-    static tf::TransformBroadcaster br;
-
-    tf::Matrix3x3 globalRotation_rh = cameraRotation_rh * rotation270degXZ;
-    tf::Vector3 globalTranslation_rh = cameraTranslation_rh * rotation270degXZ;
-    tf::Transform transform = tf::Transform(globalRotation_rh, globalTranslation_rh);
-    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera_link", "camera_pose"));
-
-    //
-
-    cv::Mat R = pose(cv::Rect(0,0,3,3));
-    cv::Mat T = pose(cv::Rect(2,0,1,3));
-    cv::Mat vec = (cv::Mat_<float>(3,1) << 0, 0, 1);
-
-    cv::Mat position = -1 * R.t() * T;
-    cv::Mat lookDir = R.t() * vec;
-
-    cout << "R" << endl << R << endl << "T" << endl << T << endl << vec << endl;
-
-    cout << "Position" << endl << position << endl << lookDir << endl;
 }
 
 void ImageGrabber::PublishMapPoints(unsigned int seq) {
@@ -199,5 +150,3 @@ void ImageGrabber::PublishMapPoints(unsigned int seq) {
 
     mapPub->publish(pointCloudMsg);
 }
-
-

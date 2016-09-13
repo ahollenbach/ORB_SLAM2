@@ -34,6 +34,12 @@ namespace ORB_SLAM2
 class MapDrawer
 {
 public:
+    struct Color {
+        float r,g,b;
+        Color(float r, float g, float b) : r(r),g(g),b(b) {}
+    };
+
+public:
     MapDrawer(Map* pMap, const string &strSettingPath);
 
     Map* mpMap;
@@ -44,8 +50,12 @@ public:
     void SetCurrentCameraPose(const cv::Mat &Tcw);
     void SetReferenceKeyFrame(KeyFrame *pKF);
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M);
+    void SetPointColor(Color* color);
 
 private:
+    void SetGlColor3f(Color* color, bool darken);
+
+    Color* pointColor;
 
     float mKeyFrameSize;
     float mKeyFrameLineWidth;

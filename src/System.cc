@@ -113,7 +113,6 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);
 
     //Initialize the Viewer thread and launch
-    XInitThreads();
     mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer,mpTracker,strSettingsFile);
     if(bUseViewer)
         mptViewer = new thread(&Viewer::Run, mpViewer);
@@ -452,6 +451,12 @@ const vector<MapPoint*> System::GetReferencePoints()
 
 int System::GetSystemId() {
     return this->systemId;
+}
+
+void System::SetRosContainer(RosContainer* container)
+{
+    rosContainer = container;
+    mpLoopCloser->SetRosContainer(container);
 }
 
 } //namespace ORB_SLAM

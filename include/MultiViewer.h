@@ -19,8 +19,8 @@
 */
 
 
-#ifndef VIEWER_H
-#define VIEWER_H
+#ifndef MULTI_VIEWER_H
+#define MULTI_VIEWER_H
 
 #include "FrameDrawer.h"
 #include "MapDrawer.h"
@@ -37,10 +37,10 @@ class FrameDrawer;
 class MapDrawer;
 class System;
 
-class Viewer
+class MultiViewer
 {
 public:
-    Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Tracking *pTracking, const string &strSettingPath);
+    MultiViewer(std::vector<System*> pSystems, const string &strSettingPath);
 
     // Main thread function. Draw points, keyframes, the current camera pose and the last processed
     // frame. Drawing is refreshed according to the camera fps. We use Pangolin.
@@ -60,10 +60,7 @@ private:
 
     bool Stop();
 
-    System* mpSystem;
-    FrameDrawer* mpFrameDrawer;
-    MapDrawer* mpMapDrawer;
-    Tracking* mpTracker;
+    std::vector<System*> mpSystems;
 
     // 1/fps in ms
     double mT;
@@ -81,8 +78,8 @@ private:
     bool mbStopRequested;
     std::mutex mMutexStop;
 
-    string currentFrameTitle;
     string mapViewerTitle;
+    vector<string> frameTitles;
     string menuName;
     string displayName;
 };
@@ -90,6 +87,6 @@ private:
 }
 
 
-#endif // VIEWER_H
+#endif // MULTI_VIEWER_H
 	
 
