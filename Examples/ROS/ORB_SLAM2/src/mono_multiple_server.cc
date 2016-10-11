@@ -214,6 +214,7 @@ void MonoServer::SetRosContainers(std::vector<ORB_SLAM2::RosContainer*> containe
     rosContainers = containers;
 
     for(size_t i=0, iend=mpSLAMs.size(); i<iend;i++) {
+        cout << "Setting ros container " << i << endl;
         mpSLAMs[i]->SetRosContainer(rosContainers[i]);
     }
 }

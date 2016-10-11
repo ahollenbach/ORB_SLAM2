@@ -43,12 +43,27 @@ MultiLoopClosing::MultiLoopClosing(vector<System*> pSystems, const bool bFixScal
     mpMatchedKF = NULL;
 
     mlpLoopKeyFrameQueues = std::vector<std::list<KeyFrame*>>(pSystems.size(), std::list<KeyFrame*>());
+
+    // 1 loop state for each potential matching, will have to collapse opposite when loops are found.
+    loopStates = std::vector<std::vector<LoopState*>>(pSystems.size(), std::vector<LoopState*>());
+    for (std::size_t i = 0, max = loopStates.size(); i < max; ++i)
+    {
+        for (std::size_t j = 0; j < max; ++j)
+        {
+            if(i == j)
+            {
+                loopStates[i].push_back(nullptr); // nullify self comparisons, as they won't be used
+            } else
+            {
+                loopStates[i].push_back(new LoopState(i, j));
+            }
+        }
+    }
 }
 
 void MultiLoopClosing::Run()
 {
-    mbFinished =false;
-    bool broadcastTF = false;
+    mbFinished = false;
 
     while(1)
     {
@@ -63,21 +78,11 @@ void MultiLoopClosing::Run()
                if(ComputeSim3())
                {
                    // Perform loop fusion and pose graph optimization
-//                   CorrectLoop();
-                   cout << "=========================" << endl;
+                   CorrectLoop();
+                   cout << "======" << activeLoopState->sourceIdx << " --> " << activeLoopState->targetIdx << "======" << endl;
                    cout << mScw << endl;
-                   static tf::TransformBroadcaster br;
-                   br.sendTransform(tf::StampedTransform(g2o2TF(mg2oScw), ros::Time::now(), "world", "0to1"));
-                   broadcastTF = true;
                }
             }
-        }
-
-        if(!broadcastTF)
-        {
-            static tf::TransformBroadcaster br;
-            br.sendTransform(tf::StampedTransform(tf::Transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(0.0, 0.0, 0.0)),
-                                                  ros::Time::now(), "world", "0to1"));
         }
 
         ResetIfRequested();
@@ -95,30 +100,45 @@ void MultiLoopClosing::InsertKeyFrame(int sourceId, KeyFrame *pKF)
 {
     unique_lock<mutex> lock(mMutexLoopQueue);
     if(pKF->mnId!=0)
+    {
         mlpLoopKeyFrameQueues[sourceId].push_back(pKF);
+    }
 }
 
 bool MultiLoopClosing::CheckNewKeyFrames()
 {
     unique_lock<mutex> lock(mMutexLoopQueue);
 
-    // TODO temporarily only check 0 (against 1), because we don't want to compare the other direction
-    return(!mlpLoopKeyFrameQueues[0].empty());
-//    for (std::size_t i = 0, max = mlpLoopKeyFrameQueues.size(); i < max; ++i)
-//    {
-//        if(!mlpLoopKeyFrameQueues[i].empty())
-//        {
-//            return TRUE;
-//        }
-//    }
-//    return FALSE;
+    // Search n->end, then 0->n, prioritize cycling through our maps, where n is +1 from where we last popped
+    currentFrameQueueIndex = (currentFrameQueueIndex + 1) % mlpLoopKeyFrameQueues.size();
+
+
+    for (std::size_t i = currentFrameQueueIndex, max = mlpLoopKeyFrameQueues.size(); i < max; ++i)
+    {
+        if(!mlpLoopKeyFrameQueues[i].empty())
+        {
+            currentFrameQueueIndex = i;
+            return true;
+        }
+    }
+
+    for (std::size_t i = 0, max = currentFrameQueueIndex; i < max; ++i)
+    {
+        if(!mlpLoopKeyFrameQueues[i].empty())
+        {
+            currentFrameQueueIndex = i;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool MultiLoopClosing::DetectLoop()
 {
     // Set the current kf and call detect loop with source index and a
     // comparison map to attempt to loop against
-    uint sourceSystemIdx = 0;
+    uint sourceSystemIdx = currentFrameQueueIndex;
 
     {
         unique_lock<mutex> lock(mMutexLoopQueue);
@@ -182,7 +202,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     if(vpCandidateKFs.empty())
     {
 //        mpSystems[0]->mpKeyFrameDatabase->add(mpCurrentKF);
-//        mvConsistentGroups.clear();
+//        activeLoopState->mvConsistentGroups.clear();
         mpCurrentKF->SetErase();
         return false;
     }
@@ -193,16 +213,17 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 //    }
 //    cout << endl << "==============" << endl;
 
-
+    // Once we've settled on a candidate, set it as the active state so all methods can access it
+    activeLoopState = loopStates[sourceSystemIdx][comparisonSystemIdx];
 
     // For each loop candidate check consistency with previous loop candidates
     // Each candidate expands a covisibility group (keyframes connected to the loop candidate in the covisibility graph)
     // A group is consistent with a previous group if they share at least a keyframe
     // We must detect a consistent loop in several consecutive keyframes to accept it
-    mvpEnoughConsistentCandidates.clear();
+    activeLoopState->mvpEnoughConsistentCandidates.clear();
 
     vector<ConsistentGroup> vCurrentConsistentGroups;
-    vector<bool> vbConsistentGroup(mvConsistentGroups.size(),false);
+    vector<bool> vbConsistentGroup(activeLoopState->mvConsistentGroups.size(),false);
     for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
     {
         KeyFrame* pCandidateKF = vpCandidateKFs[i];
@@ -212,9 +233,9 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 
         bool bEnoughConsistent = false;
         bool bConsistentForSomeGroup = false;
-        for(size_t iG=0, iendG=mvConsistentGroups.size(); iG<iendG; iG++)
+        for(size_t iG=0, iendG=activeLoopState->mvConsistentGroups.size(); iG<iendG; iG++)
         {
-            set<KeyFrame*> sPreviousGroup = mvConsistentGroups[iG].first;
+            set<KeyFrame*> sPreviousGroup = activeLoopState->mvConsistentGroups[iG].first;
 
             bool bConsistent = false;
             for(set<KeyFrame*>::iterator sit=spCandidateGroup.begin(), send=spCandidateGroup.end(); sit!=send;sit++)
@@ -229,7 +250,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 
             if(bConsistent)
             {
-                int nPreviousConsistency = mvConsistentGroups[iG].second;
+                int nPreviousConsistency = activeLoopState->mvConsistentGroups[iG].second;
                 int nCurrentConsistency = nPreviousConsistency + 1;
                 if(!vbConsistentGroup[iG])
                 {
@@ -239,7 +260,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
                 }
                 if(nCurrentConsistency>=mnCovisibilityConsistencyTh && !bEnoughConsistent)
                 {
-                    mvpEnoughConsistentCandidates.push_back(pCandidateKF);
+                    activeLoopState->mvpEnoughConsistentCandidates.push_back(pCandidateKF);
                     bEnoughConsistent=true; //this avoid to insert the same candidate more than once
                 }
             }
@@ -254,13 +275,13 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     }
 
     // Update Covisibility Consistent Groups
-    mvConsistentGroups = vCurrentConsistentGroups;
+    activeLoopState->mvConsistentGroups = vCurrentConsistentGroups;
 //
 //
 //    // Add Current Keyframe to database
 //    mpSystems[0]->mpKeyFrameDatabase->add(mpCurrentKF);
 //
-    if(mvpEnoughConsistentCandidates.empty())
+    if(activeLoopState->mvpEnoughConsistentCandidates.empty())
     {
         mpCurrentKF->SetErase();
         return false;
@@ -271,7 +292,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 //        {
 //            cout << mvConsistentGroups[iG].first.size() << " " << mvConsistentGroups[iG].second << endl;
 //        }
-
+        currentComparisonSystemIndex = comparisonSystemIdx;
         return true;
     }
 //
@@ -281,9 +302,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 
 bool MultiLoopClosing::ComputeSim3()
 {
-    // For each consistent loop candidate we try to compute a Sim3
-
-    const int nInitialCandidates = mvpEnoughConsistentCandidates.size();
+    const int nInitialCandidates = activeLoopState->mvpEnoughConsistentCandidates.size();
 
     // We compute first ORB matches for each candidate
     // If enough matches are found, we setup a Sim3Solver
@@ -302,7 +321,7 @@ bool MultiLoopClosing::ComputeSim3()
 
     for(int i=0; i<nInitialCandidates; i++)
     {
-        KeyFrame* pKF = mvpEnoughConsistentCandidates[i];
+        KeyFrame* pKF = activeLoopState->mvpEnoughConsistentCandidates[i];
 
         // avoid that local mapping erase it while it is being processed in this thread
         pKF->SetNotErase();
@@ -341,7 +360,7 @@ bool MultiLoopClosing::ComputeSim3()
             if(vbDiscarded[i])
                 continue;
 
-            KeyFrame* pKF = mvpEnoughConsistentCandidates[i];
+            KeyFrame* pKF = activeLoopState->mvpEnoughConsistentCandidates[i];
 
             // Perform 5 Ransac Iterations
             vector<bool> vbInliers;
@@ -385,7 +404,7 @@ bool MultiLoopClosing::ComputeSim3()
                     mg2oScw = gScm*gSmw;
                     mScw = Converter::toCvMat(mg2oScw);
 
-                    mvpCurrentMatchedPoints = vpMapPointMatches;
+                    activeLoopState->mvpCurrentMatchedPoints = vpMapPointMatches;
                     break;
                 }
             }
@@ -395,7 +414,7 @@ bool MultiLoopClosing::ComputeSim3()
     if(!bMatch)
     {
         for(int i=0; i<nInitialCandidates; i++)
-             mvpEnoughConsistentCandidates[i]->SetErase();
+            activeLoopState->mvpEnoughConsistentCandidates[i]->SetErase();
         mpCurrentKF->SetErase();
         return false;
     }
@@ -403,7 +422,7 @@ bool MultiLoopClosing::ComputeSim3()
     // Retrieve MapPoints seen in Loop Keyframe and neighbors
     vector<KeyFrame*> vpLoopConnectedKFs = mpMatchedKF->GetVectorCovisibleKeyFrames();
     vpLoopConnectedKFs.push_back(mpMatchedKF);
-    mvpLoopMapPoints.clear();
+    activeLoopState->mvpLoopMapPoints.clear();
     for(vector<KeyFrame*>::iterator vit=vpLoopConnectedKFs.begin(); vit!=vpLoopConnectedKFs.end(); vit++)
     {
         KeyFrame* pKF = *vit;
@@ -415,7 +434,7 @@ bool MultiLoopClosing::ComputeSim3()
             {
                 if(!pMP->isBad() && pMP->mnLoopPointForKF!=mpCurrentKF->mnId)
                 {
-                    mvpLoopMapPoints.push_back(pMP);
+                    activeLoopState->mvpLoopMapPoints.push_back(pMP);
                     pMP->mnLoopPointForKF=mpCurrentKF->mnId;
                 }
             }
@@ -423,29 +442,29 @@ bool MultiLoopClosing::ComputeSim3()
     }
 
     // Find more matches projecting with the computed Sim3
-    matcher.SearchByProjection(mpCurrentKF, mScw, mvpLoopMapPoints, mvpCurrentMatchedPoints,10);
+    matcher.SearchByProjection(mpCurrentKF, mScw, activeLoopState->mvpLoopMapPoints, activeLoopState->mvpCurrentMatchedPoints,10);
 
     // If enough matches accept Loop
     int nTotalMatches = 0;
-    for(size_t i=0; i<mvpCurrentMatchedPoints.size(); i++)
+    for(size_t i=0; i<activeLoopState->mvpCurrentMatchedPoints.size(); i++)
     {
-        if(mvpCurrentMatchedPoints[i])
+        if(activeLoopState->mvpCurrentMatchedPoints[i])
             nTotalMatches++;
     }
 
     if(nTotalMatches>=40)
     {
         for(int i=0; i<nInitialCandidates; i++)
-            if(mvpEnoughConsistentCandidates[i]!=mpMatchedKF)
-                mvpEnoughConsistentCandidates[i]->SetErase();
+            if(activeLoopState->mvpEnoughConsistentCandidates[i]!=mpMatchedKF)
+                activeLoopState->mvpEnoughConsistentCandidates[i]->SetErase();
 
-        cout << mScw << endl;
+//        cout << mScw << endl;
         return true;
     }
     else
     {
         for(int i=0; i<nInitialCandidates; i++)
-            mvpEnoughConsistentCandidates[i]->SetErase();
+            activeLoopState->mvpEnoughConsistentCandidates[i]->SetErase();
         mpCurrentKF->SetErase();
         return false;
     }
@@ -454,11 +473,13 @@ bool MultiLoopClosing::ComputeSim3()
 
 void MultiLoopClosing::CorrectLoop()
 {
-    cout << "Loop detected!" << endl;
+    cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
+
+    System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
 
     // Send a stop signal to Local Mapping
     // Avoid new keyframes are inserted while correcting the loop
-    mpSystems[0]->mpLocalMapper->RequestStop();
+    systemToCorrect->mpLocalMapper->RequestStop();
 
     // If a Global Bundle Adjustment is running, abort it
     if(isRunningGBA())
@@ -473,7 +494,7 @@ void MultiLoopClosing::CorrectLoop()
     }
 
     // Wait until Local Mapping has effectively stopped
-    while(!mpSystems[0]->mpLocalMapper->isStopped())
+    while(!systemToCorrect->mpLocalMapper->isStopped())
     {
         usleep(1000);
     }
@@ -482,8 +503,8 @@ void MultiLoopClosing::CorrectLoop()
     mpCurrentKF->UpdateConnections();
 
     // Retrieve keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
-    mvpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
-    mvpCurrentConnectedKFs.push_back(mpCurrentKF);
+    activeLoopState->mvpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
+    activeLoopState->mvpCurrentConnectedKFs.push_back(mpCurrentKF);
 
     KeyFrameAndPose CorrectedSim3, NonCorrectedSim3;
     CorrectedSim3[mpCurrentKF]=mg2oScw;
@@ -492,9 +513,9 @@ void MultiLoopClosing::CorrectLoop()
 
     {
         // Get Map Mutex
-        unique_lock<mutex> lock(mpSystems[0]->mpMap->mMutexMapUpdate);
+        unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
-        for(vector<KeyFrame*>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+        for(vector<KeyFrame*>::iterator vit=activeLoopState->mvpCurrentConnectedKFs.begin(), vend=activeLoopState->mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
         {
             KeyFrame* pKFi = *vit;
 
@@ -586,35 +607,41 @@ void MultiLoopClosing::CorrectLoop()
 
     }
 
+    cout << "-";
     // Project MapPoints observed in the neighborhood of the loop keyframe
     // into the current keyframe and neighbors using corrected poses.
     // Fuse duplications.
-    SearchAndFuse(CorrectedSim3);
+//    SearchAndFuse(CorrectedSim3);
 
 
-    // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
-    map<KeyFrame*, set<KeyFrame*> > LoopConnections;
-
-    for(vector<KeyFrame*>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
-    {
-        KeyFrame* pKFi = *vit;
-        vector<KeyFrame*> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
-
-        // Update connections. Detect new links.
-        pKFi->UpdateConnections();
-        LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
-        for(vector<KeyFrame*>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
-        {
-            LoopConnections[pKFi].erase(*vit_prev);
-        }
-        for(vector<KeyFrame*>::iterator vit2=mvpCurrentConnectedKFs.begin(), vend2=mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
-        {
-            LoopConnections[pKFi].erase(*vit2);
-        }
-    }
+//    // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
+//    map<KeyFrame*, set<KeyFrame*> > LoopConnections;
+//
+//    cout << "0";
+//
+//    for(vector<KeyFrame*>::iterator vit=activeLoopState->mvpCurrentConnectedKFs.begin(), vend=activeLoopState->mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+//    {
+//        KeyFrame* pKFi = *vit;
+//        vector<KeyFrame*> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
+//
+//        // Update connections. Detect new links.
+//        pKFi->UpdateConnections();
+//        LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
+//        for(vector<KeyFrame*>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
+//        {
+//            LoopConnections[pKFi].erase(*vit_prev);
+//        }
+//        for(vector<KeyFrame*>::iterator vit2=activeLoopState->mvpCurrentConnectedKFs.begin(), vend2=activeLoopState->mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
+//        {
+//            LoopConnections[pKFi].erase(*vit2);
+//        }
+//        cout << "1";
+//    }
+//    cout << "3";
 
     // Optimize graph
-    Optimizer::OptimizeEssentialGraph(mpSystems[0]->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
+//    Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
+    cout << "4";
 
     // Add loop edge
     mpMatchedKF->AddLoopEdge(mpCurrentKF);
@@ -625,13 +652,14 @@ void MultiLoopClosing::CorrectLoop()
     mbFinishedGBA = false;
     mbStopGBA = false;
     mpThreadGBA = new thread(&MultiLoopClosing::RunGlobalBundleAdjustment,this,mpCurrentKF->mnId);
+    cout << "5" << endl;
 
     // Loop closed. Release Local Mapping.
-    mpSystems[0]->mpLocalMapper->Release();
+    systemToCorrect->mpLocalMapper->Release();
 
     cout << "Loop Closed!" << endl;
 
-    mLastLoopKFid = mpCurrentKF->mnId;   
+    mLastLoopKFid = mpCurrentKF->mnId;
 }
 
 void MultiLoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap)
@@ -645,18 +673,20 @@ void MultiLoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap)
         g2o::Sim3 g2oScw = mit->second;
         cv::Mat cvScw = Converter::toCvMat(g2oScw);
 
-        vector<MapPoint*> vpReplacePoints(mvpLoopMapPoints.size(),static_cast<MapPoint*>(NULL));
-        matcher.Fuse(pKF,cvScw,mvpLoopMapPoints,4,vpReplacePoints);
+        vector<MapPoint*> vpReplacePoints(activeLoopState->mvpLoopMapPoints.size(),static_cast<MapPoint*>(NULL));
+        matcher.Fuse(pKF,cvScw,activeLoopState->mvpLoopMapPoints,4,vpReplacePoints);
 
         // Get Map Mutex
-        unique_lock<mutex> lock(mpSystems[0]->mpMap->mMutexMapUpdate);
-        const int nLP = mvpLoopMapPoints.size();
+        System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
+
+        unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
+        const int nLP = activeLoopState->mvpLoopMapPoints.size();
         for(int i=0; i<nLP;i++)
         {
             MapPoint* pRep = vpReplacePoints[i];
             if(pRep)
             {
-                pRep->Replace(mvpLoopMapPoints[i]);
+                pRep->Replace(activeLoopState->mvpLoopMapPoints[i]);
             }
         }
     }
@@ -686,6 +716,7 @@ void MultiLoopClosing::ResetIfRequested()
     unique_lock<mutex> lock(mMutexReset);
     if(mbResetRequested)
     {
+        // TODO reset all
         mlpLoopKeyFrameQueues[0].clear();
         mLastLoopKFid=0;
         mbResetRequested=false;
@@ -696,7 +727,9 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 {
     cout << "Starting Global Bundle Adjustment" << endl;
 
-    Optimizer::GlobalBundleAdjustemnt(mpSystems[0]->mpMap,20,&mbStopGBA,nLoopKF,false);
+    System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
+
+    Optimizer::GlobalBundleAdjustemnt(systemToCorrect->mpMap,20,&mbStopGBA,nLoopKF,false);
 
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -710,19 +743,19 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
         {
             cout << "Global Bundle Adjustment finished" << endl;
             cout << "Updating map ..." << endl;
-            mpSystems[0]->mpLocalMapper->RequestStop();
+            systemToCorrect->mpLocalMapper->RequestStop();
             // Wait until Local Mapping has effectively stopped
 
-            while(!mpSystems[0]->mpLocalMapper->isStopped() && !mpSystems[0]->mpLocalMapper->isFinished())
+            while(!systemToCorrect->mpLocalMapper->isStopped() && !systemToCorrect->mpLocalMapper->isFinished())
             {
                 usleep(1000);
             }
 
             // Get Map Mutex
-            unique_lock<mutex> lock(mpSystems[0]->mpMap->mMutexMapUpdate);
+            unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
             // Correct keyframes starting at map first keyframe
-            list<KeyFrame*> lpKFtoCheck(mpSystems[0]->mpMap->mvpKeyFrameOrigins.begin(),mpSystems[0]->mpMap->mvpKeyFrameOrigins.end());
+            list<KeyFrame*> lpKFtoCheck(systemToCorrect->mpMap->mvpKeyFrameOrigins.begin(),systemToCorrect->mpMap->mvpKeyFrameOrigins.end());
 
             while(!lpKFtoCheck.empty())
             {
@@ -748,7 +781,7 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             }
 
             // Correct MapPoints
-            const vector<MapPoint*> vpMPs = mpSystems[0]->mpMap->GetAllMapPoints();
+            const vector<MapPoint*> vpMPs = systemToCorrect->mpMap->GetAllMapPoints();
 
             for(size_t i=0; i<vpMPs.size(); i++)
             {
@@ -787,7 +820,7 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             // Publish map points
 
 
-            mpSystems[0]->mpLocalMapper->Release();
+            systemToCorrect->mpLocalMapper->Release();
 
             cout << "Map updated!" << endl;
         }

@@ -85,7 +85,6 @@ void LocalMapping::Run()
             }
 
             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
-            // TODO
         }
         else if(Stop())
         {

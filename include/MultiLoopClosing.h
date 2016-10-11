@@ -51,6 +51,17 @@ public:
     typedef map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,
         Eigen::aligned_allocator<std::pair<const KeyFrame*, g2o::Sim3> > > KeyFrameAndPose;
 
+    struct LoopState {
+        int sourceIdx, targetIdx;
+        LoopState(int sourceIdx, int targetIdx) : sourceIdx(sourceIdx), targetIdx(targetIdx) {};
+
+        std::vector<ConsistentGroup> mvConsistentGroups;
+        std::vector<KeyFrame*> mvpEnoughConsistentCandidates;
+        std::vector<KeyFrame*> mvpCurrentConnectedKFs;
+        std::vector<MapPoint*> mvpCurrentMatchedPoints;
+        std::vector<MapPoint*> mvpLoopMapPoints;
+    };
+
 public:
 
     MultiLoopClosing(vector<System*> pSystems,const bool bFixScale);
@@ -85,6 +96,7 @@ protected:
 
     bool DetectLoop();
     bool DetectLoop(int sourceSystemIdx, int comparisonSystemIdx);
+    LoopState* activeLoopState;
 
     bool ComputeSim3();
 
@@ -114,11 +126,10 @@ protected:
     // Loop detector variables
     KeyFrame* mpCurrentKF;
     KeyFrame* mpMatchedKF;
-    std::vector<ConsistentGroup> mvConsistentGroups;
-    std::vector<KeyFrame*> mvpEnoughConsistentCandidates;
-    std::vector<KeyFrame*> mvpCurrentConnectedKFs;
-    std::vector<MapPoint*> mvpCurrentMatchedPoints;
-    std::vector<MapPoint*> mvpLoopMapPoints;
+
+    // Each is a vector of vectors of comparisons between one kf set and another
+    std::vector<std::vector<LoopState*>> loopStates;
+
     cv::Mat mScw;
     g2o::Sim3 mg2oScw;
 
@@ -135,6 +146,9 @@ protected:
     bool mbFixScale;
 
     tf::Transform g2o2TF(const g2o::Sim3 sim3);
+
+    uint currentFrameQueueIndex;
+    uint currentComparisonSystemIndex;
 };
 
 } //namespace ORB_SLAM
