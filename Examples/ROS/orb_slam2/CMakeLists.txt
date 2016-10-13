@@ -24,9 +24,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O3 -march=native")
 
 
 set(orb_slam2_INCLUDE_DIRS
-  ${PROJECT_SOURCE_DIR}/include    # orb_slam2/System.h
   ${ORB_SLAM2_SOURCE_DIR}/include  # System.h
-  ${ORB_SLAM2_SOURCE_DIR}          # Thirparty
+  ${ORB_SLAM2_SOURCE_DIR}          # Thirdparty
 )
 
 set(orb_slam2_LIBRARIES

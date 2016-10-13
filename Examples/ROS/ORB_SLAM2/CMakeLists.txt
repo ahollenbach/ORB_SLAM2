@@ -1,15 +1,13 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 2.4.6)
+include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 
-project(ORB_SLAM2)
-find_package(catkin REQUIRED COMPONENTS
-     roscpp
-     sensor_msgs
-     geometry_msgs
-     image_transport
-     message_filters
-     cv_bridge
-     tf
-     cmake_modules)
+rosbuild_init()
+
+IF(NOT ROS_BUILD_TYPE)
+  SET(ROS_BUILD_TYPE Release)
+ENDIF()
+
+MESSAGE("Build type: " ${ROS_BUILD_TYPE})
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O3 -march=native ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O3 -march=native")
@@ -35,34 +33,25 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../../../cmake_modules)
 find_package(OpenCV 2.4.3 REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
-find_package(octomap REQUIRED)
-find_package(PCL 1.3 REQUIRED COMPONENTS common io)
-
-catkin_package()
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/../../../
 ${PROJECT_SOURCE_DIR}/../../../include
 ${Pangolin_INCLUDE_DIRS}
-${OCTOMAP_INCLUDE_DIRS}
-${PCL_INCLUDE_DIRS}
 )
 
-set(LIBS
-${catkin_LIBRARIES}
+set(LIBS 
 ${OpenCV_LIBS} 
 ${EIGEN3_LIBS}
 ${Pangolin_LIBRARIES}
-${OCTOMAP_LIBRARIES}
-${PCL_LIBRARY_DIRS}
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/g2o/lib/libg2o.so
 ${PROJECT_SOURCE_DIR}/../../../lib/libORB_SLAM2.so
 )
 
 # Node for monocular camera
-add_executable(Mono
+rosbuild_add_executable(Mono
 src/ros_mono.cc
 )
 
@@ -70,26 +59,8 @@ target_link_libraries(Mono
 ${LIBS}
 )
 
-# Node for monocular multiple
-add_executable(MonoMultiple
-src/ros_mono_multiple.cc
-)
-
-target_link_libraries(MonoMultiple
-${LIBS}
-)
-
-# Node for monocular server
-add_executable(MonoServer
-src/mono_multiple_server.cc
-)
-
-target_link_libraries(MonoServer
-${LIBS}
-)
-
 # Node for stereo camera
-add_executable(Stereo
+rosbuild_add_executable(Stereo
 src/ros_stereo.cc
 )
 
@@ -98,7 +69,7 @@ ${LIBS}
 )
 
 # Node for RGB-D camera
-add_executable(RGBD
+rosbuild_add_executable(RGBD
 src/ros_rgbd.cc
 )
 

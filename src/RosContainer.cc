@@ -30,7 +30,7 @@ void RosContainer::InitCloudPublisher()
 void RosContainer::InitCameraPosePublisher()
 {
     string topic = topicStem + "pose";
-    pointCloudPublisher = nodeHandler->advertise<geometry_msgs::Pose>(topic, 10);
+    cameraPosePublisher = nodeHandler->advertise<geometry_msgs::Pose>(topic, 10);
 }
 
 void RosContainer::InitKeyFramePublisher()
