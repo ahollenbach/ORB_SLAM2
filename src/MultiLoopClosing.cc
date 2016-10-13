@@ -515,7 +515,8 @@ void MultiLoopClosing::CorrectLoop()
         // Get Map Mutex
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
-        for(vector<KeyFrame*>::iterator vit=activeLoopState->mvpCurrentConnectedKFs.begin(), vend=activeLoopState->mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+        vector<KeyFrame*> allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
+        for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
         {
             KeyFrame* pKFi = *vit;
 
@@ -607,7 +608,6 @@ void MultiLoopClosing::CorrectLoop()
 
     }
 
-    cout << "-";
     // Project MapPoints observed in the neighborhood of the loop keyframe
     // into the current keyframe and neighbors using corrected poses.
     // Fuse duplications.
@@ -641,7 +641,6 @@ void MultiLoopClosing::CorrectLoop()
 
     // Optimize graph
 //    Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
-    cout << "4";
 
     // Add loop edge
     mpMatchedKF->AddLoopEdge(mpCurrentKF);
@@ -652,7 +651,6 @@ void MultiLoopClosing::CorrectLoop()
     mbFinishedGBA = false;
     mbStopGBA = false;
     mpThreadGBA = new thread(&MultiLoopClosing::RunGlobalBundleAdjustment,this,mpCurrentKF->mnId);
-    cout << "5" << endl;
 
     // Loop closed. Release Local Mapping.
     systemToCorrect->mpLocalMapper->Release();
@@ -816,9 +814,6 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
                     pMP->SetWorldPos(Rwc*Xc+twc);
                 }
             }
-
-            // Publish map points
-
 
             systemToCorrect->mpLocalMapper->Release();
 

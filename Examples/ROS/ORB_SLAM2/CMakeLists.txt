@@ -4,6 +4,7 @@ project(ORB_SLAM2)
 find_package(catkin REQUIRED COMPONENTS
      roscpp
      sensor_msgs
+     geometry_msgs
      image_transport
      message_filters
      cv_bridge

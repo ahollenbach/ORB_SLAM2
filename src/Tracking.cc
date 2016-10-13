@@ -268,7 +268,7 @@ void Tracking::Track()
 {
     if(mState==NO_IMAGES_YET)
     {
-        mState = NOT_INITIALIZED;
+        SetTrackingState(NOT_INITIALIZED);
     }
 
     mLastProcessedState=mState;
@@ -410,9 +410,9 @@ void Tracking::Track()
         }
 
         if(bOK)
-            mState = OK;
+            SetTrackingState(OK);
         else
-            mState=LOST;
+            SetTrackingState(LOST);
 
         // Update drawer
         mpFrameDrawer->Update(this);
@@ -556,7 +556,7 @@ void Tracking::StereoInitialization()
 
         mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
 
-        mState=OK;
+        SetTrackingState(OK);
     }
 }
 
@@ -733,7 +733,7 @@ void Tracking::CreateInitialMapMonocular()
 
     mpMap->mvpKeyFrameOrigins.push_back(pKFini);
 
-    mState=OK;
+    SetTrackingState(OK);
 }
 
 void Tracking::CheckReplacedInLastFrame()
@@ -1544,7 +1544,7 @@ void Tracking::Reset()
 
     KeyFrame::nNextId = 0;
     Frame::nNextId = 0;
-    mState = NO_IMAGES_YET;
+    SetTrackingState(NO_IMAGES_YET);
 
     if(mpInitializer)
     {
@@ -1598,6 +1598,22 @@ void Tracking::InformOnlyTracking(const bool &flag)
     mbOnlyTracking = flag;
 }
 
+void Tracking::SetTrackingState(eTrackingState state)
+{
+    bool stateChanged = mState != state;
+
+    mState = state;
+
+    if (stateChanged && rosContainer != NULL)
+    {
+        rosContainer->NotifyStateChange(state);
+    }
+}
+
+void Tracking::SetRosContainer(RosContainer* container)
+{
+    rosContainer = container;
+}
 
 
 } //namespace ORB_SLAM

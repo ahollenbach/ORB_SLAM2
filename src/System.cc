@@ -457,6 +457,7 @@ void System::SetRosContainer(RosContainer* container)
 {
     rosContainer = container;
     mpLoopCloser->SetRosContainer(container);
+    mpTracker->SetRosContainer(container);
 }
 
 } //namespace ORB_SLAM

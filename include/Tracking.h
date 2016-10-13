@@ -49,6 +49,7 @@ class Map;
 class LocalMapping;
 class LoopClosing;
 class System;
+class RosContainer;
 
 class Tracking
 {  
@@ -87,6 +88,8 @@ public:
     };
 
     eTrackingState mState;
+    // Write all changes in state here so we can hook out if need be
+    void SetTrackingState(eTrackingState state);
     eTrackingState mLastProcessedState;
 
     // Input sensor
@@ -114,6 +117,8 @@ public:
     bool mbOnlyTracking;
 
     void Reset();
+
+    void SetRosContainer(RosContainer* rosContainer);
 
 protected:
 
@@ -214,6 +219,8 @@ protected:
     bool mbRGB;
 
     list<MapPoint*> mlpTemporalPoints;
+
+    RosContainer* rosContainer;
 };
 
 } //namespace ORB_SLAM

@@ -13,7 +13,9 @@ RosContainer::RosContainer(int systemId, ros::NodeHandle* nodeHandler, MultiLoop
     topicStem = topicStemStream.str();
 
     RosContainer::InitCloudPublisher();
+    RosContainer::InitCameraPosePublisher();
     RosContainer::InitKeyFramePublisher();
+    RosContainer::InitStateChangePublisher();
 
     keyFrameSeq = 0;
     pointCloudSeq = 0;
@@ -25,10 +27,22 @@ void RosContainer::InitCloudPublisher()
     pointCloudPublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
 }
 
+void RosContainer::InitCameraPosePublisher()
+{
+    string topic = topicStem + "pose";
+    pointCloudPublisher = nodeHandler->advertise<geometry_msgs::Pose>(topic, 10);
+}
+
 void RosContainer::InitKeyFramePublisher()
 {
     string topic = topicStem + "keyframe";
     keyFramePublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
+}
+
+void RosContainer::InitStateChangePublisher()
+{
+    string topic = topicStem + "trackingState";
+    stateChangePublisher = nodeHandler->advertise<std_msgs::Int32>(topic, 1, true);
 }
 
 int RosContainer::GetKeyFrameSeq()
@@ -45,4 +59,10 @@ void RosContainer::InsertKeyFrame(KeyFrame *pKF)
 {
     globalLoopCloser->InsertKeyFrame(systemId, pKF);
 }
+
+void RosContainer::NotifyStateChange(int state)
+{
+    stateChangePublisher.publish(state);
+}
+
 }

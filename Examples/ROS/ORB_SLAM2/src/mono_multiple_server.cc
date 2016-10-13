@@ -27,6 +27,7 @@
 #include<ros/ros.h>
 #include<cv_bridge/cv_bridge.h>
 #include<sensor_msgs/PointCloud.h>
+#include<geometry_msgs/Pose.h>
 
 #include<opencv2/core/core.hpp>
 
@@ -34,6 +35,7 @@
 #include<include/RosContainer.h>
 #include<include/MultiViewer.h>
 #include<include/MultiLoopClosing.h>
+#include<include/Converter.h>
 
 using namespace std;
 
@@ -65,6 +67,7 @@ public:
 
 private:
     void PublishMapPoints(int idx, unsigned int seq);
+    void PublishCameraPose(int idx, unsigned int seq, cv::Mat pose);
 
     std::vector<ORB_SLAM2::RosContainer*> rosContainers;
 };
@@ -148,10 +151,10 @@ void MonoServer::GrabImage(const sensor_msgs::ImageConstPtr& msg, int sourceIdx)
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return;
     }
-    mpSLAMs[sourceIdx]->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    cv::Mat pose = mpSLAMs[sourceIdx]->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
 
     PublishMapPoints(sourceIdx, cv_ptr->header.seq);
-
+    PublishCameraPose(sourceIdx, cv_ptr->header.seq, pose);
 }
 
 void MonoServer::Shutdown()
@@ -174,7 +177,64 @@ void MonoServer::Shutdown()
 }
 
 
-void MonoServer::PublishMapPoints(int idx, unsigned int seq) {
+void MonoServer::PublishCameraPose(int idx, unsigned int seq, cv::Mat pose)
+{
+    // Converter::toSE3Quat(pose)
+//    geometry_msgs::Point32 point;
+//    point.x = pose.at<float>(0,0);
+//    point.y = pose.at<float>(1,0);
+//    point.z = pose.at<float>(2,0);
+//
+//    geometry_msgs::Quaternion orientation;
+//    orientation.w = 1;
+//
+//    geometry_msgs::Pose poseMsg;
+//    poseMsg.header.stamp = ros::Time::now();
+//    poseMsg.header.frame_id = "world";
+//    poseMsg.header.seq = seq;
+//
+//    poseMsg.position = point;
+//    poseMsg.orientation = orientation;
+//
+//    rosContainers[idx]->cameraPosePublisher.publish(poseMsg);
+
+    // From https://github.com/Thomas00010111/ORB_SLAM2/blob/29f5bfdaccc420f3e3175180839ddea4c46353a7/Examples/ROS/ORB_SLAM2/src/ros_rgbd.cc
+    /* global left handed coordinate system */
+    // static cv::Mat pose_prev = cv::Mat::eye(4,4, CV_32F);
+    // static cv::Mat world_lh = cv::Mat::eye(4,4, CV_32F);
+    // // matrix to flip signs of sinus in rotation matrix, not sure why we need to do that
+    // static const cv::Mat flipSign = (cv::Mat_<float>(4,4) <<   1,-1,-1, 1,
+    //         -1, 1,-1, 1,
+    //         -1,-1, 1, 1,
+    //         1, 1, 1, 1);
+
+    // //prev_pose * T = pose
+    // cv::Mat translation =  (pose * pose_prev.inv()).mul(flipSign);
+    // world_lh = world_lh * translation;
+    // pose_prev = pose.clone();
+
+    // /* transform into global right handed coordinate system, publish in ROS*/
+    // tf::Matrix3x3 cameraRotation_rh(  - world_lh.at<float>(0,0),   world_lh.at<float>(0,1),   world_lh.at<float>(0,2),
+    //                                   - world_lh.at<float>(1,0),   world_lh.at<float>(1,1),   world_lh.at<float>(1,2),
+    //                                   world_lh.at<float>(2,0), - world_lh.at<float>(2,1), - world_lh.at<float>(2,2));
+
+    // tf::Vector3 cameraTranslation_rh( world_lh.at<float>(0,3),world_lh.at<float>(1,3), - world_lh.at<float>(2,3) );
+
+    // //rotate 270deg about x and 270deg about x to get ENU: x forward, y left, z up
+    // const tf::Matrix3x3 rotation270degXZ(   0, 1, 0,
+    //                                         0, 0, 1,
+    //                                         1, 0, 0);
+
+    // static tf::TransformBroadcaster br;
+
+    // tf::Matrix3x3 globalRotation_rh = cameraRotation_rh * rotation270degXZ;
+    // tf::Vector3 globalTranslation_rh = cameraTranslation_rh * rotation270degXZ;
+    // tf::Transform transform = tf::Transform(globalRotation_rh, globalTranslation_rh);
+    // br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "camera_link", "camera_pose"));
+}
+
+void MonoServer::PublishMapPoints(int idx, unsigned int seq)
+{
     // Get points and publish them
     const vector<ORB_SLAM2::MapPoint*> vpMPs = mpSLAMs[idx]->GetPoints();
     const vector<ORB_SLAM2::MapPoint*> &vpRefMPs = mpSLAMs[idx]->GetReferencePoints();
@@ -198,7 +258,8 @@ void MonoServer::PublishMapPoints(int idx, unsigned int seq) {
     pointCloudMsg.header.stamp = ros::Time::now();
     if(idx == 1)
     {
-        pointCloudMsg.header.frame_id = "0to1";
+        pointCloudMsg.header.frame_id = "world";
+//        pointCloudMsg.header.frame_id = "0to1";
     } else
     {
         pointCloudMsg.header.frame_id = "world";
