@@ -4,6 +4,7 @@
 #include<string>
 #include<ros/ros.h>
 #include<sensor_msgs/PointCloud.h>
+#include<sensor_msgs/PointCloud2.h>
 #include<std_msgs/Int32.h>
 #include "MultiLoopClosing.h"
 #include "Tracking.h"
@@ -21,6 +22,7 @@ public:
 
     ros::Publisher keyFramePublisher;
     ros::Publisher pointCloudPublisher;
+    ros::Publisher pointCloud2Publisher;
     ros::Publisher cameraPosePublisher;
     ros::Publisher stateChangePublisher;
 

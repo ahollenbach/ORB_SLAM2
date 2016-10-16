@@ -25,6 +25,7 @@ void RosContainer::InitCloudPublisher()
 {
     string topic = topicStem + "cloud";
     pointCloudPublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
+    pointCloud2Publisher = nodeHandler->advertise<sensor_msgs::PointCloud2>(topic + "2", 10);
 }
 
 void RosContainer::InitCameraPosePublisher()
