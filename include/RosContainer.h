@@ -5,6 +5,8 @@
 #include<ros/ros.h>
 #include<sensor_msgs/PointCloud.h>
 #include<sensor_msgs/PointCloud2.h>
+#include <octomap/OcTree.h>
+#include <octomap_server/OctomapServer.h>
 #include<std_msgs/Int32.h>
 #include "MultiLoopClosing.h"
 #include "Tracking.h"
@@ -25,6 +27,7 @@ public:
     ros::Publisher pointCloud2Publisher;
     ros::Publisher cameraPosePublisher;
     ros::Publisher stateChangePublisher;
+    ros::Publisher octomapPublisher;
 
     // Get and increment a seq id
     int GetKeyFrameSeq();
@@ -40,6 +43,7 @@ private:
     int systemId;
     ros::NodeHandle* nodeHandler;
     MultiLoopClosing* globalLoopCloser;
+    octomap::OcTree* octree;
 
     void InitCloudPublisher();
     void InitCameraPosePublisher();
@@ -48,6 +52,8 @@ private:
 
     int keyFrameSeq;
     int pointCloudSeq;
+
+    std::map<long,std::tuple<octomap::Pointcloud, octomap::point3d>> keyFrameOctoDb;
 };
 
 } //namespace ORB_SLAM
