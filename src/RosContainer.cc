@@ -75,14 +75,18 @@ void RosContainer::PublishKeyFrame(KeyFrame *pKF)
 
     for(auto point : points)
     {
-        vPoints.push_back(MatToPoint32(point->GetWorldPos()));
+        // Attempt to select only good points that have been verified by multiple frames
+        if (!point->isBad() && point->nObs > 1)
+        {
+            vPoints.push_back(MatToPoint32(point->GetWorldPos()));
+        }
     }
 
     ORB_SLAM2::KeyFrameMsg kf;
     kf.header.frame_id = "world";
     kf.header.seq = GetKeyFrameSeq();
     kf.key_frame_id = pKF->mnFrameId;
-    kf.origin = MatToPoint32(pKF->GetTranslation());
+    kf.origin = MatToPoint32(pKF->GetPoseInverse().rowRange(0,3).col(3)); // translation (x,y,z)
     kf.points = vPoints;
 
     keyFramePublisher.publish(kf);

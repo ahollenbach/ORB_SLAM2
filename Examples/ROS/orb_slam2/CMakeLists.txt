@@ -24,6 +24,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O3 -march=native")
 
 
 set(orb_slam2_INCLUDE_DIRS
+  ${ORB_SLAM2_SOURCE_DIR}/build/devel/include/ # Depends on already built message types from build.sh
   ${ORB_SLAM2_SOURCE_DIR}/include  # System.h
   ${ORB_SLAM2_SOURCE_DIR}          # Thirdparty
 )
