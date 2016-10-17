@@ -19,8 +19,6 @@ RosContainer::RosContainer(int systemId, ros::NodeHandle* nodeHandler, MultiLoop
 
     keyFrameSeq = 0;
     pointCloudSeq = 0;
-
-    octree = new octomap::OcTree(0.001);
 }
 
 void RosContainer::InitCloudPublisher()
@@ -28,7 +26,6 @@ void RosContainer::InitCloudPublisher()
     string topic = topicStem + "cloud";
     pointCloudPublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
     pointCloud2Publisher = nodeHandler->advertise<sensor_msgs::PointCloud2>(topic + "2", 10);
-    octomapPublisher = nodeHandler->advertise<octomap_msgs::Octomap>(topic + "/octomap",10);
 }
 
 void RosContainer::InitCameraPosePublisher()
@@ -40,7 +37,7 @@ void RosContainer::InitCameraPosePublisher()
 void RosContainer::InitKeyFramePublisher()
 {
     string topic = topicStem + "keyframe";
-    keyFramePublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
+    keyFramePublisher = nodeHandler->advertise<ORB_SLAM2::KeyFrameMsg>(topic, 10);
 }
 
 void RosContainer::InitStateChangePublisher()
@@ -63,24 +60,42 @@ void RosContainer::InsertKeyFrame(KeyFrame *pKF)
 {
     globalLoopCloser->InsertKeyFrame(systemId, pKF);
 
-    cv::Mat originMat = pKF->GetTranslation();
-    octomap::point3d origin(originMat.at<float>(0),originMat.at<float>(1), originMat.at<float>(2));
+    PublishKeyFrame(pKF);
+}
 
+void RosContainer::UpdateKeyFrame(KeyFrame *pKF)
+{
+    PublishKeyFrame(pKF);
+}
+
+void RosContainer::PublishKeyFrame(KeyFrame *pKF)
+{
     set<MapPoint*> points = pKF->GetMapPoints();
-    octomap::Pointcloud cloud;
+    vector<geometry_msgs::Point32> vPoints;
 
     for(auto point : points)
     {
-        cv::Mat targetMat = point->GetWorldPos();
-        cloud.push_back(targetMat.at<float>(0),targetMat.at<float>(1), targetMat.at<float>(2));
+        vPoints.push_back(MatToPoint32(point->GetWorldPos()));
     }
-    octree->insertPointCloud(cloud, origin);
-    octree->updateInnerOccupancy();
-    keyFrameOctoDb[pKF->mnId] = std::make_tuple(cloud, origin);
 
-    octomap_msgs::Octomap bmap_msg;
-    octomap_msgs::binaryMapToMsg(*octree, bmap_msg);
-    octomapPublisher.publish(bmap_msg);
+    ORB_SLAM2::KeyFrameMsg kf;
+    kf.header.frame_id = "world";
+    kf.header.seq = GetKeyFrameSeq();
+    kf.key_frame_id = pKF->mnFrameId;
+    kf.origin = MatToPoint32(pKF->GetTranslation());
+    kf.points = vPoints;
+
+    keyFramePublisher.publish(kf);
+}
+
+geometry_msgs::Point32 RosContainer::MatToPoint32(cv::Mat mat)
+{
+    geometry_msgs::Point32 p;
+    p.x = mat.at<float>(0);
+    p.y = mat.at<float>(1);
+    p.z = mat.at<float>(2);
+
+    return p;
 }
 
 void RosContainer::NotifyStateChange(int state)

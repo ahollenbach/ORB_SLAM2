@@ -10,7 +10,6 @@
   <depend package="tf"/>
   <depend package="sensor_msgs"/>
   <depend package="image_transport"/>
-  <depend package="cv_bridge"/>
-
+z
 
 </package>

@@ -34,15 +34,23 @@ find_package(catkin REQUIRED COMPONENTS
         sensor_msgs
         message_filters
         message_generation
-        cmake_modules
-        pcl_conversions
-        pcl_ros
-        octomap_server)
+        cmake_modules)
+
+add_message_files(
+        FILES
+        KeyFrameMsg.msg
+)
+
+generate_messages(
+        DEPENDENCIES
+        geometry_msgs
+        sensor_msgs
+        ORB_SLAM2
+)
 
 find_package(OpenCV 2.4.3 REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
-find_package(PCL REQUIRED COMPONENTS common io)
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
@@ -50,7 +58,6 @@ ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 ${OCTOMAP_INCLUDE_DIRS}
-${PCL_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -88,7 +95,6 @@ ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 ${OCTOMAP_LIBRARIES}
-${PCL_LIBRARY_DIRS}
 )
 
 # Build examples
