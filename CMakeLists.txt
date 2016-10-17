@@ -33,8 +33,20 @@ find_package(catkin REQUIRED COMPONENTS
         tf
         sensor_msgs
         message_filters
+        message_generation
         cmake_modules)
 
+add_message_files(
+        FILES
+        KeyFrameMsg.msg
+)
+
+generate_messages(
+        DEPENDENCIES
+        geometry_msgs
+        sensor_msgs
+        ORB_SLAM2
+)
 
 find_package(OpenCV 2.4.3 REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED)
