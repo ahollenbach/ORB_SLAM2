@@ -37,7 +37,7 @@ void RosContainer::InitCameraPosePublisher()
 void RosContainer::InitKeyFramePublisher()
 {
     string topic = topicStem + "keyframe";
-    keyFramePublisher = nodeHandler->advertise<ORB_SLAM2::KeyFrameMsg>(topic, 10);
+    keyFramePublisher = nodeHandler->advertise<sensor_msgs::PointCloud>(topic, 10);
 }
 
 void RosContainer::InitStateChangePublisher()
@@ -65,27 +65,33 @@ void RosContainer::InsertKeyFrame(KeyFrame *pKF)
 
 void RosContainer::UpdateKeyFrame(KeyFrame *pKF)
 {
+    // By pushing new one, any listeners know that we've updated this frame
     PublishKeyFrame(pKF);
 }
 
 void RosContainer::PublishKeyFrame(KeyFrame *pKF)
 {
+    // Please fix this.
+
     set<MapPoint*> points = pKF->GetMapPoints();
     vector<geometry_msgs::Point32> vPoints;
 
+    // NO THANK YOU
+    vPoints.push_back(MatToPoint32(pKF->GetTranslation()));
     for(auto point : points)
     {
         vPoints.push_back(MatToPoint32(point->GetWorldPos()));
     }
 
-    ORB_SLAM2::KeyFrameMsg kf;
-    kf.header.frame_id = "world";
-    kf.header.seq = GetKeyFrameSeq();
-    kf.key_frame_id = pKF->mnFrameId;
-    kf.origin = MatToPoint32(pKF->GetTranslation());
-    kf.points = vPoints;
+    sensor_msgs::PointCloud cloud;
+    // LIKE SERIOUSLY, set keyframe id as "frame_id" -_-
+    cloud.header.frame_id = pKF->mnFrameId;
+    cloud.header.seq = GetKeyFrameSeq();
+    cloud.points = vPoints;
+    keyFramePublisher.publish(cloud);
 
-    keyFramePublisher.publish(kf);
+    // All of this is because I can't get a custom message type to build properly
+    // I am so sorry.
 }
 
 geometry_msgs::Point32 RosContainer::MatToPoint32(cv::Mat mat)
