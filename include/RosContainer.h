@@ -5,8 +5,8 @@
 #include<ros/ros.h>
 #include<sensor_msgs/PointCloud.h>
 #include<sensor_msgs/PointCloud2.h>
+#include<nav_msgs/Odometry.h>
 #include "ORB_SLAM2/KeyFrameMsg.h"
-//#include "KeyFrameMsg.h"
 #include<std_msgs/Int32.h>
 #include "MultiLoopClosing.h"
 #include "Tracking.h"
