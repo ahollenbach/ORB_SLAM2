@@ -31,7 +31,7 @@ void RosContainer::InitCloudPublisher()
 void RosContainer::InitCameraPosePublisher()
 {
     string topic = topicStem + "pose";
-    cameraPosePublisher = nodeHandler->advertise<nav_msgs::Odometry>(topic, 10);
+    cameraPosePublisher = nodeHandler->advertise<geometry_msgs::PoseStamped>(topic, 10);
 }
 
 void RosContainer::InitKeyFramePublisher()

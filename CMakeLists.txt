@@ -32,7 +32,6 @@ find_package(catkin REQUIRED COMPONENTS
         roscpp
         tf
         sensor_msgs
-        nav_msgs
         message_filters
         message_generation
         cmake_modules)
@@ -46,7 +45,6 @@ generate_messages(
         DEPENDENCIES
         geometry_msgs
         sensor_msgs
-        nav_msgs
         ORB_SLAM2
 )
 
