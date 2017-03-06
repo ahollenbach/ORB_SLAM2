@@ -26,8 +26,9 @@
 namespace ORB_SLAM2
 {
 
-MultiViewer::MultiViewer(std::vector<ORB_SLAM2::System*> pSystems, const string &strSettingPath):
-    mpSystems(pSystems), mbFinishRequested(false), mbFinished(true), mbStopped(false), mbStopRequested(false)
+MultiViewer::MultiViewer(std::vector<ORB_SLAM2::System*> pSystems, const string &strSettingPath, bool showCameraFeeds):
+    mpSystems(pSystems), mbFinishRequested(false), mbFinished(true), mbStopped(false), mbStopRequested(false),
+    showCameraFeeds(showCameraFeeds)
 {
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
 
@@ -48,6 +49,7 @@ MultiViewer::MultiViewer(std::vector<ORB_SLAM2::System*> pSystems, const string 
     mViewpointY = fSettings["Viewer.ViewpointY"];
     mViewpointZ = fSettings["Viewer.ViewpointZ"];
     mViewpointF = fSettings["Viewer.ViewpointF"];
+
 
 
     // Set title string vars
@@ -97,10 +99,13 @@ void MultiViewer::Run()
     pangolin::OpenGlMatrix Twc;
     Twc.SetIdentity();
 
-    for (std::size_t i = 0, max = mpSystems.size(); i < max; ++i)
+    if(showCameraFeeds)
     {
-        cv::namedWindow(frameTitles[i]);
-        cv::moveWindow(frameTitles[i], 1921, 10 + i*540); // TODO temp
+        for (std::size_t i = 0, max = mpSystems.size(); i < max; ++i)
+        {
+            cv::namedWindow(frameTitles[i]);
+            cv::moveWindow(frameTitles[i], 1921, 10 + i*540); // TODO temp
+        }
     }
 
     bool bFollow = true;
@@ -155,8 +160,11 @@ void MultiViewer::Run()
             if(menuShowPoints)
                 mpSystems[i]->mpMapDrawer->DrawMapPoints();
 
-            cv::Mat im = mpSystems[i]->mpFrameDrawer->DrawFrame();
-            cv::imshow(frameTitles[i],im);
+            if(showCameraFeeds)
+            {
+                cv::Mat im = mpSystems[i]->mpFrameDrawer->DrawFrame();
+                cv::imshow(frameTitles[i],im);
+            }
             cv::waitKey(mT);
         }
         pangolin::FinishFrame();

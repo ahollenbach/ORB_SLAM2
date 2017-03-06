@@ -188,6 +188,11 @@ public:
     const int mnMaxY;
     const cv::Mat mK;
 
+    // Used for merging
+    std::vector<Frame*> similar_frames;
+    bool isMergeCandidate;
+    int parent;
+
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:

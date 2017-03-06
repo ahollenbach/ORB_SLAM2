@@ -117,7 +117,11 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph)
 
             glLineWidth(mKeyFrameLineWidth);
 //            glColor3f(0.0f,0.0f,1.0f);
-            glColor3f(0.0f, 0.43f, 0.56f); // dark blue
+            if (pKF->isMergeCandidate) {
+                glColor3f(1.0f, 0.0f, 0.0f); // red
+            } else {
+                glColor3f(0.0f, 0.43f, 0.56f); // dark blue
+            }
             glBegin(GL_LINES);
             glVertex3f(0,0,0);
             glVertex3f(w,h,z);

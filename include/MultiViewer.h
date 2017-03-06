@@ -40,7 +40,7 @@ class System;
 class MultiViewer
 {
 public:
-    MultiViewer(std::vector<System*> pSystems, const string &strSettingPath);
+    MultiViewer(std::vector<System*> pSystems, const string &strSettingPath, bool showCameraFeeds);
 
     // Main thread function. Draw points, keyframes, the current camera pose and the last processed
     // frame. Drawing is refreshed according to the camera fps. We use Pangolin.
@@ -78,6 +78,7 @@ private:
     bool mbStopRequested;
     std::mutex mMutexStop;
 
+    bool showCameraFeeds;
     string mapViewerTitle;
     vector<string> frameTitles;
     string menuName;

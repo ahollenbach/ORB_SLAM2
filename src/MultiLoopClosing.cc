@@ -274,6 +274,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
         }
     }
 
+
     // Update Covisibility Consistent Groups
     activeLoopState->mvConsistentGroups = vCurrentConsistentGroups;
 //
@@ -510,7 +511,6 @@ void MultiLoopClosing::CorrectLoop()
     CorrectedSim3[mpCurrentKF]=mg2oScw;
     cv::Mat Twc = mpCurrentKF->GetPoseInverse();
 
-
     {
         // Get Map Mutex
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
@@ -606,38 +606,82 @@ void MultiLoopClosing::CorrectLoop()
 //            }
 //        }
 
+        /////////////////////////// QUERY ALL //////////////////////////////////////
+        vector<vector<KeyFrame*>> allCandidateKFs;
+
+        cout << "============= POTENTIAL ==============" << endl;
+        allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
+        for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
+        {
+             KeyFrame* pKFi = *vit;
+
+             if(pKFi==mpCurrentKF)
+             {
+                 continue;
+             }
+
+             const vector<KeyFrame*> vpConnectedKeyFrames = pKFi->GetVectorCovisibleKeyFrames();
+             const DBoW2::BowVector &CurrentBowVec = pKFi->mBowVec;
+             float minScore = 1;
+             for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
+             {
+                 KeyFrame* pKF = vpConnectedKeyFrames[i];
+                 if(pKF->isBad())
+                     continue;
+                 const DBoW2::BowVector &BowVec = pKF->mBowVec;
+
+                 float score = mpSystems[activeLoopState->sourceIdx]->mpVocabulary->score(CurrentBowVec, BowVec); // TODO
+
+                 if(score<minScore)
+                     minScore = score;
+             }
+
+             allCandidateKFs.push_back(mpSystems[activeLoopState->targetIdx]->mpKeyFrameDatabase->DetectLoopCandidates(pKFi, minScore));
+
+            for(int i=0;i<allCandidateKFs[allCandidateKFs.size() - 1].size();i++)
+            {
+                pKFi->isMergeCandidate = true; // Run each time, doesn't matter
+                allCandidateKFs[allCandidateKFs.size() - 1][i]->isMergeCandidate = true;
+            }
+        }
+
+        int total = 0;
+        for(int i=0;i<allCandidateKFs.size();i++)
+        {
+            cout << allCandidateKFs[i].size() << " ";
+            total += allCandidateKFs[i].size();
+        }
+        cout << endl << "Total: " << total << endl;
+        cout << "=============================" << endl;
+        //////////////////////////////////////////////////////////////////////////////
     }
 
     // Project MapPoints observed in the neighborhood of the loop keyframe
     // into the current keyframe and neighbors using corrected poses.
     // Fuse duplications.
-//    SearchAndFuse(CorrectedSim3);
+//   SearchAndFuse(CorrectedSim3);
 
 
-//    // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
-//    map<KeyFrame*, set<KeyFrame*> > LoopConnections;
-//
-//    cout << "0";
-//
-//    for(vector<KeyFrame*>::iterator vit=activeLoopState->mvpCurrentConnectedKFs.begin(), vend=activeLoopState->mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
-//    {
-//        KeyFrame* pKFi = *vit;
-//        vector<KeyFrame*> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
-//
-//        // Update connections. Detect new links.
-//        pKFi->UpdateConnections();
-//        LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
-//        for(vector<KeyFrame*>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
-//        {
-//            LoopConnections[pKFi].erase(*vit_prev);
-//        }
-//        for(vector<KeyFrame*>::iterator vit2=activeLoopState->mvpCurrentConnectedKFs.begin(), vend2=activeLoopState->mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
-//        {
-//            LoopConnections[pKFi].erase(*vit2);
-//        }
-//        cout << "1";
-//    }
-//    cout << "3";
+   // // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
+   // map<KeyFrame*, set<KeyFrame*> > LoopConnections;
+
+   // for(vector<KeyFrame*>::iterator vit=activeLoopState->mvpCurrentConnectedKFs.begin(), vend=activeLoopState->mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+   // {
+   //     KeyFrame* pKFi = *vit;
+   //     vector<KeyFrame*> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
+
+   //     // Update connections. Detect new links.
+   //     pKFi->UpdateConnections();
+   //     LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
+   //     for(vector<KeyFrame*>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
+   //     {
+   //         LoopConnections[pKFi].erase(*vit_prev);
+   //     }
+   //     for(vector<KeyFrame*>::iterator vit2=activeLoopState->mvpCurrentConnectedKFs.begin(), vend2=activeLoopState->mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
+   //     {
+   //         LoopConnections[pKFi].erase(*vit2);
+   //     }
+   // }
 
     // Optimize graph
 //    Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
