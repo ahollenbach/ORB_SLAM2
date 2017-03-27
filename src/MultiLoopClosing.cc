@@ -19,13 +19,9 @@
 */
 
 #include "MultiLoopClosing.h"
-
 #include "Sim3Solver.h"
-
 #include "Converter.h"
-
 #include "Optimizer.h"
-
 #include "ORBmatcher.h"
 
 #include<mutex>
@@ -42,9 +38,11 @@ MultiLoopClosing::MultiLoopClosing(vector<System*> pSystems, const bool bFixScal
     mnCovisibilityConsistencyTh = 3;
     mpMatchedKF = NULL;
 
+    // Queues for each of the sets of frames to pull off and join
     mlpLoopKeyFrameQueues = std::vector<std::list<KeyFrame*>>(pSystems.size(), std::list<KeyFrame*>());
 
-    // 1 loop state for each potential matching, will have to collapse opposite when loops are found.
+    // Each map pairing gets a unique loop state to track similarity status for new KFs
+    // This includes opposites (i.e. both map 0 -> map 1 and map 1 -> map 0 have loop states)
     loopStates = std::vector<std::vector<LoopState*>>(pSystems.size(), std::vector<LoopState*>());
     for (std::size_t i = 0, max = loopStates.size(); i < max; ++i)
     {
@@ -79,8 +77,8 @@ void MultiLoopClosing::Run()
                {
                    // Perform loop fusion and pose graph optimization
                    CorrectLoop();
-                   cout << "======" << activeLoopState->sourceIdx << " --> " << activeLoopState->targetIdx << "======" << endl;
-                   cout << mScw << endl;
+                   // cout << "======" << activeLoopState->sourceIdx << " --> " << activeLoopState->targetIdx << "======" << endl;
+                   // cout << mScw << endl;
                }
             }
         }
@@ -101,6 +99,7 @@ void MultiLoopClosing::InsertKeyFrame(int sourceId, KeyFrame *pKF)
     unique_lock<mutex> lock(mMutexLoopQueue);
     if(pKF->mnId!=0)
     {
+        // cout << sourceId << "." << pKF->localId << endl;
         mlpLoopKeyFrameQueues[sourceId].push_back(pKF);
     }
 }
@@ -109,10 +108,8 @@ bool MultiLoopClosing::CheckNewKeyFrames()
 {
     unique_lock<mutex> lock(mMutexLoopQueue);
 
-    // Search n->end, then 0->n, prioritize cycling through our maps, where n is +1 from where we last popped
+    // Search n->end, then 0->n, cycling through our maps, where n is +1 from where we last popped
     currentFrameQueueIndex = (currentFrameQueueIndex + 1) % mlpLoopKeyFrameQueues.size();
-
-
     for (std::size_t i = currentFrameQueueIndex, max = mlpLoopKeyFrameQueues.size(); i < max; ++i)
     {
         if(!mlpLoopKeyFrameQueues[i].empty())
@@ -121,7 +118,6 @@ bool MultiLoopClosing::CheckNewKeyFrames()
             return true;
         }
     }
-
     for (std::size_t i = 0, max = currentFrameQueueIndex; i < max; ++i)
     {
         if(!mlpLoopKeyFrameQueues[i].empty())
@@ -136,24 +132,25 @@ bool MultiLoopClosing::CheckNewKeyFrames()
 
 bool MultiLoopClosing::DetectLoop()
 {
-    // Set the current kf and call detect loop with source index and a
-    // comparison map to attempt to loop against
+    // Set the current KF and call DetectLoop(int, int) with source index and a
+    // comparison map index to detect loops between maps
     uint sourceSystemIdx = currentFrameQueueIndex;
 
     {
         unique_lock<mutex> lock(mMutexLoopQueue);
         mpCurrentKF = mlpLoopKeyFrameQueues[sourceSystemIdx].front();
         mlpLoopKeyFrameQueues[sourceSystemIdx].pop_front();
-        // Avoid that a keyframe can be erased while it is being process by this thread
+        // Don't let keyframe be erased while it is being processed by this thread
         mpCurrentKF->SetNotErase();
     }
 
-    for(size_t targetIdx=0; targetIdx<mpSystems.size(); targetIdx++)
+    for(std::size_t targetIdx=0; targetIdx<mpSystems.size(); targetIdx++)
     {
         if(sourceSystemIdx == targetIdx)
         {
             continue;
         }
+        // TODO return array of loops to handle correctly
         if(DetectLoop(sourceSystemIdx, targetIdx))
         {
             return true;
@@ -166,13 +163,15 @@ bool MultiLoopClosing::DetectLoop()
 
 bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 {
-//    //If the map contains less than 2 KF or less than 2 KF have passed from last loop detection
-//    if(mpCurrentKF->mnId<mLastLoopKFid+2)
-//    {
-//        mpCurrentKF->SetErase();
-//
-//        return false;
-//    }
+    // Lock it to prevent other threads from double checking same state
+    unique_lock<mutex> lock(mMutexLoopState);
+
+    // If the map contains less than n KF or less than n KF have passed from last loop detection
+    if(mpCurrentKF->localId<loopStates[sourceSystemIdx][comparisonSystemIdx]->mLastLoopKFid + 1)
+    {
+        mpCurrentKF->SetErase();
+        return false;
+    }
 
     // Compute reference BoW similarity score
     // This is the lowest score to a connected keyframe in the covisibility graph
@@ -180,7 +179,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
     float minScore = 1;
-    for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
+    for(std::size_t i=0; i<vpConnectedKeyFrames.size(); i++)
     {
         KeyFrame* pKF = vpConnectedKeyFrames[i];
         if(pKF->isBad())
@@ -193,25 +192,16 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
             minScore = score;
     }
 
-//    cout << "Min score: " << minScore << endl;
-
     // Query the database imposing the minimum score
     vector<KeyFrame*> vpCandidateKFs = mpSystems[comparisonSystemIdx]->mpKeyFrameDatabase->DetectLoopCandidates(mpCurrentKF, minScore);
 
     // If there are no loop candidates, just add new keyframe and return false
     if(vpCandidateKFs.empty())
     {
-//        mpSystems[0]->mpKeyFrameDatabase->add(mpCurrentKF);
-//        activeLoopState->mvConsistentGroups.clear();
+//        activeLoopState->mvConsistentGroups.clear(); TODOUNCOMM
         mpCurrentKF->SetErase();
         return false;
     }
-
-//    for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
-//    {
-//        cout << vpCandidateKFs[i]->mLoopScore << ", ";
-//    }
-//    cout << endl << "==============" << endl;
 
     // Once we've settled on a candidate, set it as the active state so all methods can access it
     activeLoopState = loopStates[sourceSystemIdx][comparisonSystemIdx];
@@ -224,7 +214,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 
     vector<ConsistentGroup> vCurrentConsistentGroups;
     vector<bool> vbConsistentGroup(activeLoopState->mvConsistentGroups.size(),false);
-    for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
+    for(std::size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
     {
         KeyFrame* pCandidateKF = vpCandidateKFs[i];
 
@@ -233,7 +223,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
 
         bool bEnoughConsistent = false;
         bool bConsistentForSomeGroup = false;
-        for(size_t iG=0, iendG=activeLoopState->mvConsistentGroups.size(); iG<iendG; iG++)
+        for(std::size_t iG=0, iendG=activeLoopState->mvConsistentGroups.size(); iG<iendG; iG++)
         {
             set<KeyFrame*> sPreviousGroup = activeLoopState->mvConsistentGroups[iG].first;
 
@@ -274,14 +264,9 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
         }
     }
 
-
     // Update Covisibility Consistent Groups
     activeLoopState->mvConsistentGroups = vCurrentConsistentGroups;
-//
-//
-//    // Add Current Keyframe to database
-//    mpSystems[0]->mpKeyFrameDatabase->add(mpCurrentKF);
-//
+
     if(activeLoopState->mvpEnoughConsistentCandidates.empty())
     {
         mpCurrentKF->SetErase();
@@ -289,16 +274,20 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     }
     else
     {
-//        for(size_t iG=0, iendG=mvConsistentGroups.size(); iG<iendG; iG++)
-//        {
-//            cout << mvConsistentGroups[iG].first.size() << " " << mvConsistentGroups[iG].second << endl;
-//        }
         currentComparisonSystemIndex = comparisonSystemIdx;
+        activeLoopState->mLastLoopKFid = mpCurrentKF->localId;
+
+        // Correct the flip side too, so if we match 0.12 with 1.41, 1.41-1.51 won't match back again
+        long unsigned int lastId = loopStates[comparisonSystemIdx][sourceSystemIdx]->mLastLoopKFid;
+        for(size_t i=0;i<activeLoopState->mvpEnoughConsistentCandidates.size();i++)
+        {
+            if(activeLoopState->mvpEnoughConsistentCandidates[i]->localId > lastId)
+            {
+                loopStates[comparisonSystemIdx][sourceSystemIdx]->mLastLoopKFid = activeLoopState->mvpEnoughConsistentCandidates[i]->localId;
+            }
+        }
         return true;
     }
-//
-//    mpCurrentKF->SetErase();
-//    return false;
 }
 
 bool MultiLoopClosing::ComputeSim3()
@@ -382,7 +371,7 @@ bool MultiLoopClosing::ComputeSim3()
             if(!Scm.empty())
             {
                 vector<MapPoint*> vpMapPointMatches(vvpMapPointMatches[i].size(), static_cast<MapPoint*>(NULL));
-                for(size_t j=0, jend=vbInliers.size(); j<jend; j++)
+                for(std::size_t j=0, jend=vbInliers.size(); j<jend; j++)
                 {
                     if(vbInliers[j])
                        vpMapPointMatches[j]=vvpMapPointMatches[i][j];
@@ -428,7 +417,7 @@ bool MultiLoopClosing::ComputeSim3()
     {
         KeyFrame* pKF = *vit;
         vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
-        for(size_t i=0, iend=vpMapPoints.size(); i<iend; i++)
+        for(std::size_t i=0, iend=vpMapPoints.size(); i<iend; i++)
         {
             MapPoint* pMP = vpMapPoints[i];
             if(pMP)
@@ -447,7 +436,7 @@ bool MultiLoopClosing::ComputeSim3()
 
     // If enough matches accept Loop
     int nTotalMatches = 0;
-    for(size_t i=0; i<activeLoopState->mvpCurrentMatchedPoints.size(); i++)
+    for(std::size_t i=0; i<activeLoopState->mvpCurrentMatchedPoints.size(); i++)
     {
         if(activeLoopState->mvpCurrentMatchedPoints[i])
             nTotalMatches++;
@@ -459,7 +448,6 @@ bool MultiLoopClosing::ComputeSim3()
             if(activeLoopState->mvpEnoughConsistentCandidates[i]!=mpMatchedKF)
                 activeLoopState->mvpEnoughConsistentCandidates[i]->SetErase();
 
-//        cout << mScw << endl;
         return true;
     }
     else
@@ -474,7 +462,9 @@ bool MultiLoopClosing::ComputeSim3()
 
 void MultiLoopClosing::CorrectLoop()
 {
-    cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
+    // cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
+    cout << activeLoopState->sourceIdx << " -> " << activeLoopState->targetIdx << endl;
+    // return;
 
     System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
 
@@ -550,7 +540,7 @@ void MultiLoopClosing::CorrectLoop()
             g2o::Sim3 g2oSiw =NonCorrectedSim3[pKFi];
 
             vector<MapPoint*> vpMPsi = pKFi->GetMapPointMatches();
-            for(size_t iMP=0, endMPi = vpMPsi.size(); iMP<endMPi; iMP++)
+            for(std::size_t iMP=0, endMPi = vpMPsi.size(); iMP<endMPi; iMP++)
             {
                 MapPoint* pMPi = vpMPsi[iMP];
                 if(!pMPi)
@@ -589,7 +579,7 @@ void MultiLoopClosing::CorrectLoop()
 
 //        // Start Loop Fusion
 //        // Update matched map points and replace if duplicated
-//        for(size_t i=0; i<mvpCurrentMatchedPoints.size(); i++)
+//        for(std::size_t i=0; i<mvpCurrentMatchedPoints.size(); i++)
 //        {
 //            if(mvpCurrentMatchedPoints[i])
 //            {
@@ -606,53 +596,53 @@ void MultiLoopClosing::CorrectLoop()
 //            }
 //        }
 
+        // This part is to figure out how many potential merges were made/turn them red in the UI
         /////////////////////////// QUERY ALL //////////////////////////////////////
-        vector<vector<KeyFrame*>> allCandidateKFs;
+        // vector<vector<KeyFrame*>> allCandidateKFs;
 
-        cout << "============= POTENTIAL ==============" << endl;
-        allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
-        for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
-        {
-             KeyFrame* pKFi = *vit;
+        // cout << "============= POTENTIAL ==============" << endl;
+        // allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
+        // for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
+        // {
+        //      KeyFrame* pKFi = *vit;
 
-             if(pKFi==mpCurrentKF)
-             {
-                 continue;
-             }
+        //      if(pKFi==mpCurrentKF)
+        //      {
+        //          continue;
+        //      }
 
-             const vector<KeyFrame*> vpConnectedKeyFrames = pKFi->GetVectorCovisibleKeyFrames();
-             const DBoW2::BowVector &CurrentBowVec = pKFi->mBowVec;
-             float minScore = 1;
-             for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
-             {
-                 KeyFrame* pKF = vpConnectedKeyFrames[i];
-                 if(pKF->isBad())
-                     continue;
-                 const DBoW2::BowVector &BowVec = pKF->mBowVec;
+        //      const vector<KeyFrame*> vpConnectedKeyFrames = pKFi->GetVectorCovisibleKeyFrames();
+        //      const DBoW2::BowVector &CurrentBowVec = pKFi->mBowVec;
+        //      float minScore = 1;
+        //      for(std::size_t i=0; i<vpConnectedKeyFrames.size(); i++)
+        //      {
+        //          KeyFrame* pKF = vpConnectedKeyFrames[i];
+        //          if(pKF->isBad())
+        //              continue;
+        //          const DBoW2::BowVector &BowVec = pKF->mBowVec;
 
-                 float score = mpSystems[activeLoopState->sourceIdx]->mpVocabulary->score(CurrentBowVec, BowVec); // TODO
+        //          float score = mpSystems[activeLoopState->sourceIdx]->mpVocabulary->score(CurrentBowVec, BowVec); // TODO
 
-                 if(score<minScore)
-                     minScore = score;
-             }
+        //          if(score<minScore)
+        //              minScore = score;
+        //      }
 
-             allCandidateKFs.push_back(mpSystems[activeLoopState->targetIdx]->mpKeyFrameDatabase->DetectLoopCandidates(pKFi, minScore));
+        //     pKFi->isMergeCandidate = true;
+        //     allCandidateKFs.push_back(mpSystems[activeLoopState->targetIdx]->mpKeyFrameDatabase->DetectLoopCandidates(pKFi, minScore));
+        //     for(std::size_t i=0;i<allCandidateKFs[allCandidateKFs.size() - 1].size();i++)
+        //     {
+        //         allCandidateKFs[allCandidateKFs.size() - 1][i]->isMergeCandidate = true;
+        //     }
+        // }
 
-            for(int i=0;i<allCandidateKFs[allCandidateKFs.size() - 1].size();i++)
-            {
-                pKFi->isMergeCandidate = true; // Run each time, doesn't matter
-                allCandidateKFs[allCandidateKFs.size() - 1][i]->isMergeCandidate = true;
-            }
-        }
-
-        int total = 0;
-        for(int i=0;i<allCandidateKFs.size();i++)
-        {
-            cout << allCandidateKFs[i].size() << " ";
-            total += allCandidateKFs[i].size();
-        }
-        cout << endl << "Total: " << total << endl;
-        cout << "=============================" << endl;
+        // int total = 0;
+        // for(std::size_t i=0;i<allCandidateKFs.size();i++)
+        // {
+        //     cout << allCandidateKFs[i].size() << " ";
+        //     total += allCandidateKFs[i].size();
+        // }
+        // cout << endl << "Total: " << total << endl;
+        // cout << "=============================" << endl;
         //////////////////////////////////////////////////////////////////////////////
     }
 
@@ -684,7 +674,7 @@ void MultiLoopClosing::CorrectLoop()
    // }
 
     // Optimize graph
-//    Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
+   // Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
 
     // Add loop edge
     mpMatchedKF->AddLoopEdge(mpCurrentKF);
@@ -701,7 +691,7 @@ void MultiLoopClosing::CorrectLoop()
 
     cout << "Loop Closed!" << endl;
 
-    mLastLoopKFid = mpCurrentKF->mnId;
+    activeLoopState->mLastLoopKFid = mpCurrentKF->localId;
 }
 
 void MultiLoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap)
@@ -785,9 +775,9 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
         {
             cout << "Global Bundle Adjustment finished" << endl;
             cout << "Updating map ..." << endl;
-            systemToCorrect->mpLocalMapper->RequestStop();
-            // Wait until Local Mapping has effectively stopped
 
+            // Wait until Local Mapping has effectively stopped
+            systemToCorrect->mpLocalMapper->RequestStop();
             while(!systemToCorrect->mpLocalMapper->isStopped() && !systemToCorrect->mpLocalMapper->isFinished())
             {
                 usleep(1000);
@@ -796,12 +786,13 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             // Get Map Mutex
             unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
-            // Correct keyframes starting at map first keyframe
+            // Correct keyframes starting at map first keyframe, being sure not to double-correct any vertices
             list<KeyFrame*> lpKFtoCheck(systemToCorrect->mpMap->mvpKeyFrameOrigins.begin(),systemToCorrect->mpMap->mvpKeyFrameOrigins.end());
-
+            set<int> visitedIds;
             while(!lpKFtoCheck.empty())
             {
                 KeyFrame* pKF = lpKFtoCheck.front();
+                visitedIds.insert(pKF->mnId);
                 const set<KeyFrame*> sChilds = pKF->GetChilds();
                 cv::Mat Twc = pKF->GetPoseInverse();
                 for(set<KeyFrame*>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
@@ -814,7 +805,10 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
                         pChild->mnBAGlobalForKF=nLoopKF;
 
                     }
-                    lpKFtoCheck.push_back(pChild);
+                    if (visitedIds.count(pChild->mnId) == 0)
+                    {
+                        lpKFtoCheck.push_back(pChild);
+                    }
                 }
 
                 pKF->mTcwBefGBA = pKF->GetPose();
@@ -825,7 +819,7 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
             // Correct MapPoints
             const vector<MapPoint*> vpMPs = systemToCorrect->mpMap->GetAllMapPoints();
 
-            for(size_t i=0; i<vpMPs.size(); i++)
+            for(std::size_t i=0; i<vpMPs.size(); i++)
             {
                 MapPoint* pMP = vpMPs[i];
 

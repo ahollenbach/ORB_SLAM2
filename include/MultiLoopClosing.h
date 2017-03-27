@@ -60,6 +60,7 @@ public:
         std::vector<KeyFrame*> mvpCurrentConnectedKFs;
         std::vector<MapPoint*> mvpCurrentMatchedPoints;
         std::vector<MapPoint*> mvpLoopMapPoints;
+        long unsigned int mLastLoopKFid;
     };
 
 public:
@@ -119,6 +120,7 @@ protected:
     std::vector<std::list<KeyFrame*>> mlpLoopKeyFrameQueues;
 
     std::mutex mMutexLoopQueue;
+    std::mutex mMutexLoopState;
 
     // Loop detector parameters
     float mnCovisibilityConsistencyTh;

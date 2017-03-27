@@ -58,6 +58,7 @@ int RosContainer::GetPointCloudSeq()
 
 void RosContainer::InsertKeyFrame(KeyFrame *pKF)
 {
+    pKF->localId = nNextLocalId++;
     globalLoopCloser->InsertKeyFrame(systemId, pKF);
 
     PublishKeyFrame(pKF);
