@@ -457,7 +457,6 @@ bool MultiLoopClosing::ComputeSim3()
         mpCurrentKF->SetErase();
         return false;
     }
-
 }
 
 void MultiLoopClosing::CorrectLoop()
@@ -485,6 +484,7 @@ void MultiLoopClosing::CorrectLoop()
     }
 
     // Wait until Local Mapping has effectively stopped
+    cout << activeLoopState->sourceIdx << " starting to wait" << endl;
     while(!systemToCorrect->mpLocalMapper->isStopped())
     {
         usleep(1000);
@@ -649,7 +649,7 @@ void MultiLoopClosing::CorrectLoop()
     // Project MapPoints observed in the neighborhood of the loop keyframe
     // into the current keyframe and neighbors using corrected poses.
     // Fuse duplications.
-//   SearchAndFuse(CorrectedSim3);
+    // SearchAndFuse(CorrectedSim3);
 
 
    // // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
@@ -677,8 +677,8 @@ void MultiLoopClosing::CorrectLoop()
    // Optimizer::OptimizeEssentialGraph(systemToCorrect->mpMap, mpMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, mbFixScale);
 
     // Add loop edge
-    mpMatchedKF->AddLoopEdge(mpCurrentKF);
-    mpCurrentKF->AddLoopEdge(mpMatchedKF);
+    // mpMatchedKF->AddLoopEdge(mpCurrentKF);
+    // mpCurrentKF->AddLoopEdge(mpMatchedKF);
 
     // Launch a new thread to perform Global Bundle Adjustment
     mbRunningGBA = true;
@@ -689,7 +689,7 @@ void MultiLoopClosing::CorrectLoop()
     // Loop closed. Release Local Mapping.
     systemToCorrect->mpLocalMapper->Release();
 
-    cout << "Loop Closed!" << endl;
+    cout << "MultiLoop Closed!" << endl;
 
     activeLoopState->mLastLoopKFid = mpCurrentKF->localId;
 }

@@ -56,7 +56,7 @@ private:
 
     int keyFrameSeq;
     int pointCloudSeq;
-    long unsigned int nNextLocalId=0;
+    long unsigned int nNextLocalId;
 
 //    std::map<long,std::tuple<octomap::Pointcloud, octomap::point3d>> keyFrameOctoDb;
 };

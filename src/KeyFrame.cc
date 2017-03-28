@@ -43,7 +43,10 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap)
 {
-    mnId=nNextId++;
+    {
+        // unique_lock<mutex> lock(mMutexNextId);
+        mnId=nNextId++;
+    }
     localId=0;
 
     mGrid.resize(mnGridCols);

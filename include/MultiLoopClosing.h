@@ -53,14 +53,14 @@ public:
 
     struct LoopState {
         int sourceIdx, targetIdx;
-        LoopState(int sourceIdx, int targetIdx) : sourceIdx(sourceIdx), targetIdx(targetIdx) {};
-
         std::vector<ConsistentGroup> mvConsistentGroups;
         std::vector<KeyFrame*> mvpEnoughConsistentCandidates;
         std::vector<KeyFrame*> mvpCurrentConnectedKFs;
         std::vector<MapPoint*> mvpCurrentMatchedPoints;
         std::vector<MapPoint*> mvpLoopMapPoints;
         long unsigned int mLastLoopKFid;
+
+        LoopState(int sourceIdx, int targetIdx) : sourceIdx(sourceIdx), targetIdx(targetIdx), mLastLoopKFid(0) {};
     };
 
 public:

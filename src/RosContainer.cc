@@ -6,7 +6,7 @@ namespace ORB_SLAM2
 {
 
 RosContainer::RosContainer(int systemId, ros::NodeHandle* nodeHandler, MultiLoopClosing* loopCloser):
-        systemId(systemId), nodeHandler(nodeHandler), globalLoopCloser(loopCloser)
+        systemId(systemId), nodeHandler(nodeHandler), globalLoopCloser(loopCloser), nNextLocalId(0)
 {
     std::ostringstream topicStemStream;
     topicStemStream << "/orb" << systemId << "/";
