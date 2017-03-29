@@ -724,6 +724,23 @@ void MultiLoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap)
     }
 }
 
+vector<KeyFrame*> MultiLoopClosing::DetectAllRelocalizationCandidates(int sourceId, Frame *F)
+{
+    for(std::size_t idx=0; idx<mpSystems.size(); idx++)
+    {
+        if(idx == sourceId)
+        {
+            continue;
+        }
+
+        vector<KeyFrame*> results = mpSystems[idx]->mpKeyFrameDatabase->DetectRelocalizationCandidates(F);
+        if (results.size() > 0)
+            return results;
+    }
+
+    return vector<KeyFrame*>();
+}
+
 
 void MultiLoopClosing::RequestReset()
 {

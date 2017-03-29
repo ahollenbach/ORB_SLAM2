@@ -21,12 +21,12 @@
 #ifndef MULTI_LOOPCLOSING_H
 #define MULTI_LOOPCLOSING_H
 
+#include "Frame.h"
 #include "KeyFrame.h"
 #include "LocalMapping.h"
 #include "Map.h"
 #include "ORBVocabulary.h"
 #include "Tracking.h"
-
 #include "KeyFrameDatabase.h"
 
 #include <thread>
@@ -71,6 +71,8 @@ public:
     void Run();
 
     void InsertKeyFrame(int sourceId, KeyFrame *pKF);
+
+    vector<KeyFrame*> DetectAllRelocalizationCandidates(int sourceId, Frame *F);
 
     void RequestReset();
 

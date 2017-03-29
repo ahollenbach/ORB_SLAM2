@@ -33,6 +33,8 @@ public:
     int GetKeyFrameSeq();
     int GetPointCloudSeq();
 
+    vector<KeyFrame*> DetectAllRelocalizationCandidates(Frame *F);
+
     void InsertKeyFrame(KeyFrame *pKF);
 
     // Publish a tracking state whenever it is changed. Of type class Tracking::eTrackingState

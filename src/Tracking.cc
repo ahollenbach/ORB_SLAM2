@@ -1353,13 +1353,26 @@ void Tracking::UpdateLocalKeyFrames()
 
 bool Tracking::Relocalization()
 {
+    return Relocalization(false);
+}
+
+bool Tracking::Relocalization(bool requestCrossThread)
+{
     // Compute Bag of Words Vector
     mCurrentFrame.ComputeBoW();
 
-    // Relocalization is performed when tracking is lost
-    // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
-    vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurrentFrame);
+    vector<KeyFrame*> vpCandidateKFs;
 
+    if(requestCrossThread)
+    {
+        vpCandidateKFs = rosContainer->DetectAllRelocalizationCandidates(&mCurrentFrame);
+    } else
+    {
+        // Relocalization is performed when tracking is lost
+        // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
+        vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurrentFrame);
+    }
+    
     if(vpCandidateKFs.empty())
         return false;
 
@@ -1504,10 +1517,17 @@ bool Tracking::Relocalization()
 
     if(!bMatch)
     {
+        // If we've only checked our current map, AND we've initialized a ros container, request the global
+        // mapper to check the other maps for us
+        if(!requestCrossThread && rosContainer != NULL)
+            return Relocalization(true);
+
         return false;
     }
     else
     {
+        if(requestCrossThread)
+            cout << "Relocalized from another thread" << endl;
         mnLastRelocFrameId = mCurrentFrame.mnId;
         return true;
     }

@@ -56,6 +56,11 @@ int RosContainer::GetPointCloudSeq()
     return pointCloudSeq++;
 }
 
+std::vector<KeyFrame*> RosContainer::DetectAllRelocalizationCandidates(Frame *F)
+{
+    return globalLoopCloser->DetectAllRelocalizationCandidates(systemId, F);
+}
+
 void RosContainer::InsertKeyFrame(KeyFrame *pKF)
 {
     pKF->localId = nNextLocalId++;

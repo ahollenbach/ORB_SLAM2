@@ -138,6 +138,7 @@ protected:
     bool TrackWithMotionModel();
 
     bool Relocalization();
+    bool Relocalization(bool requestCrossThread);
 
     void UpdateLocalMap();
     void UpdateLocalPoints();

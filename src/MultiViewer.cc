@@ -154,6 +154,7 @@ void MultiViewer::Run()
         glClearColor(1.0f,1.0f,1.0f,1.0f);
         for (std::size_t i = 0, max = mpSystems.size(); i < max; ++i)
         {
+            mpSystems[i]->mpMapDrawer->GetCurrentOpenGLCameraMatrix(Twc);
             mpSystems[i]->mpMapDrawer->DrawCurrentCamera(Twc);
             if(menuShowKeyFrames || menuShowGraph)
                 mpSystems[i]->mpMapDrawer->DrawKeyFrames(menuShowKeyFrames,menuShowGraph);

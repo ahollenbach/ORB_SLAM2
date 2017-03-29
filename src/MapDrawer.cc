@@ -212,8 +212,8 @@ void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 #endif
 
     glLineWidth(mCameraLineWidth);
-//    glColor3f(0.0f,1.0f,0.0f);
-    glColor3f(0.25f, 0.73f, 0.85f); // light blue
+    SetGlColor3f(pointColor, false);
+    // glColor3f(0.25f, 0.73f, 0.85f); // light blue
     glBegin(GL_LINES);
     glVertex3f(0,0,0);
     glVertex3f(w,h,z);
