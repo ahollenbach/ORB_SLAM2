@@ -1519,8 +1519,9 @@ bool Tracking::Relocalization(bool requestCrossThread)
     {
         // If we've only checked our current map, AND we've initialized a ros container, request the global
         // mapper to check the other maps for us
-        if(!requestCrossThread && rosContainer != NULL)
-            return Relocalization(true);
+        // Disable for now
+        // if(!requestCrossThread && rosContainer != NULL)
+        //     return Relocalization(true);
 
         return false;
     }
