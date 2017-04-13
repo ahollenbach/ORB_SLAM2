@@ -26,6 +26,8 @@
 
 #include<mutex>
 #include<thread>
+#include <fstream>
+#include <ctime>
 
 
 namespace ORB_SLAM2
@@ -459,6 +461,37 @@ bool MultiLoopClosing::ComputeSim3()
     }
 }
 
+
+int GBA_RUN_NUM = 0;
+void logSim3(ofstream &ostream, int sourceIdx, int targetIdx, KeyFrame *parentKF, KeyFrame *adjustedKF, g2o::Sim3 *origS, g2o::Sim3 *newS)
+{
+    timeval curTime;
+    gettimeofday(&curTime, NULL);
+    long int ms = curTime.tv_sec * 1000 + curTime.tv_usec / 1000;
+
+    // int milli = curTime.tv_usec / 1000;
+    // char buffer [80];
+    // strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
+    // char currentTime[84] = "";
+    // sprintf(currentTime, "%s:%d", buffer, milli);
+
+    ostream << ms << "|" <<
+            GBA_RUN_NUM << "|" <<
+            sourceIdx << "|" << 
+            targetIdx << "|" << 
+            parentKF->localId << "|" << parentKF->mnId << "|" << 
+            adjustedKF->localId << "|" << adjustedKF->mnId << "|" <<
+            // corrected << "|" << 
+            newS->rotation().coeffs()[0] - origS->rotation().coeffs()[0] << "|" << 
+            newS->rotation().coeffs()[1] - origS->rotation().coeffs()[1] << "|" << 
+            newS->rotation().coeffs()[2] - origS->rotation().coeffs()[2] << "|" << 
+            newS->rotation().coeffs()[3] - origS->rotation().coeffs()[3] << "|" << 
+            newS->translation()[0] - origS->translation()[0] << "|" << 
+            newS->translation()[1] - origS->translation()[1] << "|" << 
+            newS->translation()[2] - origS->translation()[2] << "|" << 
+            newS->scale() - origS->scale() << endl;
+}
+
 void MultiLoopClosing::CorrectLoop()
 {
     // cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
@@ -489,6 +522,7 @@ void MultiLoopClosing::CorrectLoop()
     {
         usleep(1000);
     }
+    cout << activeLoopState->sourceIdx << " done waiting" << endl;
 
     // Ensure current keyframe is updated
     mpCurrentKF->UpdateConnections();
@@ -504,6 +538,13 @@ void MultiLoopClosing::CorrectLoop()
     {
         // Get Map Mutex
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
+
+        ofstream outfile("/home/ahollenbach/gba.log", ios::app);
+        if(!outfile.is_open())
+            cout << "Couldn't open log file!!" << endl;
+        if(GBA_RUN_NUM == 0)
+            outfile << "--------------------------------------------------------------" << endl;
+        GBA_RUN_NUM++;
 
         vector<KeyFrame*> allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
         for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
@@ -528,7 +569,10 @@ void MultiLoopClosing::CorrectLoop()
             g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw),Converter::toVector3d(tiw),1.0);
             //Pose without correction
             NonCorrectedSim3[pKFi]=g2oSiw;
+            // g2o::Sim3 diff = CorrectedSim3[pKFi] - NonCorrectedSim3[pKFi];
+            logSim3(outfile, activeLoopState->sourceIdx, activeLoopState->targetIdx, mpCurrentKF, pKFi, &CorrectedSim3[pKFi], &NonCorrectedSim3[pKFi]);
         }
+        outfile.close();
 
         // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
         for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)
