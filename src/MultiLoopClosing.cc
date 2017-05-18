@@ -630,7 +630,7 @@ void MultiLoopClosing::CorrectLoop()
 
         for (std::size_t i = 0, max = mpSystems.size(); i < max; ++i)
         {
-            mpSystems[i]->SaveTrajectoryForGba(GBA_RUN_NUM);
+            mpSystems[i]->SaveTrajectoryForClosure(GBA_RUN_NUM);
         }
         GBA_RUN_NUM++;
 

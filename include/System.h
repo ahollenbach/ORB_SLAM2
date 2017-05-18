@@ -64,6 +64,8 @@ public:
     System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true,
            int systemId = 0, int meta_run_num = 0, int num_clients = 1);
 
+    void SaveTrajectoryForClosure(int closureNum);
+
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).

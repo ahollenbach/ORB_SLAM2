@@ -130,10 +130,10 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
 }
 
-void System::SaveTrajectoryForGba(int closureNum)
+void System::SaveTrajectoryForClosure(int closureNum)
 {
     std::ostringstream filename;
-    filename << "/home/ahollenbach/data/results/traj/" << numClients << "/system_0" << systemId + 1 << "_" << metaRunNum << "_" << closureNum << ".txt";
+    filename << "/home/ahollenbach/data/results/traj/" << numClients << "/closures/channel_0" << systemId + 1 << "_" << metaRunNum << "_" << closureNum << ".txt";
     SaveKeyFrameTrajectoryTUM(filename.str());
 }
 
