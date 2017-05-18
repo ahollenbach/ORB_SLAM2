@@ -41,8 +41,8 @@ namespace ORB_SLAM2
 ORBVocabulary* System::mpVocabulary = new ORBVocabulary();
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer,
-               int systemId):systemId(systemId),mSensor(sensor),mbReset(false),mbActivateLocalizationMode(false),
-                                 mbDeactivateLocalizationMode(false)
+               int systemId, int meta_run_num, int num_clients):systemId(systemId),mSensor(sensor),mbReset(false),mbActivateLocalizationMode(false),
+                                 mbDeactivateLocalizationMode(false), metaRunNum(meta_run_num), numClients(num_clients)
 {
     // Output welcome message
     cout << endl <<
@@ -128,6 +128,13 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
+}
+
+void System::SaveTrajectoryForGba(int closureNum)
+{
+    std::ostringstream filename;
+    filename << "/home/ahollenbach/data/results/traj/" << numClients << "/system_0" << systemId + 1 << "_" << metaRunNum << "_" << closureNum << ".txt";
+    SaveKeyFrameTrajectoryTUM(filename.str());
 }
 
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)

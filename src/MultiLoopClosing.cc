@@ -33,11 +33,13 @@
 namespace ORB_SLAM2
 {
 
-MultiLoopClosing::MultiLoopClosing(vector<System*> pSystems, const bool bFixScale):
+MultiLoopClosing::MultiLoopClosing(vector<System*> pSystems, const bool bFixScale, const string &strSettingPath):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpSystems(pSystems), mLastLoopKFid(0),
     mbRunningGBA(false), mbFinishedGBA(true), mbStopGBA(false), mbFixScale(bFixScale)
 {
-    mnCovisibilityConsistencyTh = 3;
+    cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
+
+    mnCovisibilityConsistencyTh = fSettings["ORB.covisibilityConsistencyTh"]; // 3
     mpMatchedKF = NULL;
 
     // Queues for each of the sets of frames to pull off and join
@@ -74,18 +76,15 @@ void MultiLoopClosing::Run()
             if(DetectLoop())
             {
                // Compute similarity transformation [sR|t]
-               // In the stereo/RGBD case s=1
                if(ComputeSim3())
                {
                    // Perform loop fusion and pose graph optimization
                    CorrectLoop();
-                   // cout << "======" << activeLoopState->sourceIdx << " --> " << activeLoopState->targetIdx << "======" << endl;
-                   // cout << mScw << endl;
                }
             }
         }
 
-        ResetIfRequested();
+        // ResetIfRequested();
 
         if(CheckFinish())
             break;
@@ -101,7 +100,6 @@ void MultiLoopClosing::InsertKeyFrame(int sourceId, KeyFrame *pKF)
     unique_lock<mutex> lock(mMutexLoopQueue);
     if(pKF->mnId!=0)
     {
-        // cout << sourceId << "." << pKF->localId << endl;
         mlpLoopKeyFrameQueues[sourceId].push_back(pKF);
     }
 }
@@ -169,7 +167,7 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     unique_lock<mutex> lock(mMutexLoopState);
 
     // If the map contains less than n KF or less than n KF have passed from last loop detection
-    if(mpCurrentKF->localId<loopStates[sourceSystemIdx][comparisonSystemIdx]->mLastLoopKFid + 1)
+    if(mpCurrentKF->localId < loopStates[sourceSystemIdx][comparisonSystemIdx]->mLastLoopKFid + 4)
     {
         mpCurrentKF->SetErase();
         return false;
@@ -276,6 +274,8 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
     }
     else
     {
+        // cout << sourceSystemIdx << "." << mpCurrentKF->localId << ": " << loopStates[sourceSystemIdx][comparisonSystemIdx]->mLastLoopKFid << endl;
+
         currentComparisonSystemIndex = comparisonSystemIdx;
         activeLoopState->mLastLoopKFid = mpCurrentKF->localId;
 
@@ -286,8 +286,11 @@ bool MultiLoopClosing::DetectLoop(int sourceSystemIdx, int comparisonSystemIdx)
             if(activeLoopState->mvpEnoughConsistentCandidates[i]->localId > lastId)
             {
                 loopStates[comparisonSystemIdx][sourceSystemIdx]->mLastLoopKFid = activeLoopState->mvpEnoughConsistentCandidates[i]->localId;
+                lastId = loopStates[comparisonSystemIdx][sourceSystemIdx]->mLastLoopKFid;
             }
         }
+        // cout << sourceSystemIdx << "." << mpCurrentKF->localId << ": " << loopStates[sourceSystemIdx][comparisonSystemIdx]->mLastLoopKFid << endl;
+
         return true;
     }
 }
@@ -539,12 +542,16 @@ void MultiLoopClosing::CorrectLoop()
         // Get Map Mutex
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
-        ofstream outfile("/home/ahollenbach/gba.log", ios::app);
-        if(!outfile.is_open())
-            cout << "Couldn't open log file!!" << endl;
-        if(GBA_RUN_NUM == 0)
-            outfile << "--------------------------------------------------------------" << endl;
-        GBA_RUN_NUM++;
+        // ofstream outfile("/home/ahollenbach/data/results/gba/gba.log", ios::app);
+        // if(!outfile.is_open())
+        //     cout << "Couldn't open log file!!" << endl;
+        // if(GBA_RUN_NUM == 0)
+        // {
+        //     timeval curTime;
+        //     gettimeofday(&curTime, NULL);
+        //     long int ms = curTime.tv_sec * 1000 + curTime.tv_usec / 1000;
+        //     outfile << "------------------ " << ms << " ------------------" << endl;
+        // }
 
         vector<KeyFrame*> allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
         for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
@@ -570,9 +577,9 @@ void MultiLoopClosing::CorrectLoop()
             //Pose without correction
             NonCorrectedSim3[pKFi]=g2oSiw;
             // g2o::Sim3 diff = CorrectedSim3[pKFi] - NonCorrectedSim3[pKFi];
-            logSim3(outfile, activeLoopState->sourceIdx, activeLoopState->targetIdx, mpCurrentKF, pKFi, &CorrectedSim3[pKFi], &NonCorrectedSim3[pKFi]);
+            // logSim3(outfile, activeLoopState->sourceIdx, activeLoopState->targetIdx, mpCurrentKF, pKFi, &CorrectedSim3[pKFi], &NonCorrectedSim3[pKFi]);
         }
-        outfile.close();
+        // outfile.close();
 
         // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
         for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)
@@ -620,6 +627,12 @@ void MultiLoopClosing::CorrectLoop()
             // Make sure connections are updated
             pKFi->UpdateConnections();
         }
+
+        for (std::size_t i = 0, max = mpSystems.size(); i < max; ++i)
+        {
+            mpSystems[i]->SaveTrajectoryForGba(GBA_RUN_NUM);
+        }
+        GBA_RUN_NUM++;
 
 //        // Start Loop Fusion
 //        // Update matched map points and replace if duplicated

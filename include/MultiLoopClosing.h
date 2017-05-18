@@ -65,7 +65,7 @@ public:
 
 public:
 
-    MultiLoopClosing(vector<System*> pSystems,const bool bFixScale);
+    MultiLoopClosing(vector<System*> pSystems,const bool bFixScale, const string &strSettingPath);
 
     // Main function
     void Run();
