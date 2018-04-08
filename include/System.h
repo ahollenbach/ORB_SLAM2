@@ -178,6 +178,10 @@ private:
     bool mbDeactivateLocalizationMode;
 
     RosContainer* rosContainer;
+
+    // For logging
+    int metaRunNum;
+    int numClients;
 };
 
 }// namespace ORB_SLAM

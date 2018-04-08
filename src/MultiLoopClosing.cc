@@ -785,7 +785,8 @@ vector<KeyFrame*> MultiLoopClosing::DetectAllRelocalizationCandidates(int source
 {
     for(std::size_t idx=0; idx<mpSystems.size(); idx++)
     {
-        if(idx == sourceId)
+        int iidx = static_cast<int>(idx); // Silence warning
+        if(iidx == sourceId)
         {
             continue;
         }
