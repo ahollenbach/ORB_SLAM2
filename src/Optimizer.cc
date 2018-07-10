@@ -77,7 +77,10 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         vSE3->setEstimate(Converter::toSE3Quat(pKF->GetPose()));
         vSE3->setId(pKF->mnId);
         vSE3->setFixed(pKF->mnId==0);
-        optimizer.addVertex(vSE3);
+        if (!optimizer.vertex(vSE3->id()))
+        {
+            optimizer.addVertex(vSE3);
+        }
         if(pKF->mnId>maxKFid)
             maxKFid=pKF->mnId;
     }
@@ -96,7 +99,10 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         const int id = pMP->mnId+maxKFid+1;
         vPoint->setId(id);
         vPoint->setMarginalized(true);
-        optimizer.addVertex(vPoint);
+        if (!optimizer.vertex(vPoint->id()))
+        {
+            optimizer.addVertex(vPoint);
+        }
 
        const map<KeyFrame*,size_t> observations = pMP->GetObservations();
 
@@ -255,7 +261,10 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     vSE3->setEstimate(Converter::toSE3Quat(pFrame->mTcw));
     vSE3->setId(0);
     vSE3->setFixed(false);
-    optimizer.addVertex(vSE3);
+    if (!optimizer.vertex(vSE3->id()))
+    {
+        optimizer.addVertex(vSE3);
+    }
 
     // Set MapPoint vertices
     const int N = pFrame->N;
@@ -368,7 +377,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
     const float chi2Mono[4]={5.991,5.991,5.991,5.991};
     const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};
-    const int its[4]={10,10,10,10};    
+    const int its[4]={10,10,10,10};
 
     int nBad=0;
     for(size_t it=0; it<4; it++)
@@ -527,7 +536,10 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
         vSE3->setId(pKFi->mnId);
         vSE3->setFixed(pKFi->mnId==0);
-        optimizer.addVertex(vSE3);
+        if (!optimizer.vertex(vSE3->id()))
+        {
+            optimizer.addVertex(vSE3);
+        }
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
     }
@@ -540,7 +552,11 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
         vSE3->setId(pKFi->mnId);
         vSE3->setFixed(true);
-        optimizer.addVertex(vSE3);
+        if (!optimizer.vertex(vSE3->id())) {
+            // There is a chance the kf has already been inserted from joined map
+            optimizer.addVertex(vSE3);
+        }
+
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
     }
@@ -577,7 +593,11 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         int id = pMP->mnId+maxKFid+1;
         vPoint->setId(id);
         vPoint->setMarginalized(true);
-        optimizer.addVertex(vPoint);
+        if (!optimizer.vertex(id)) {
+            // There is a chance the kf has already been inserted from joined map
+            optimizer.addVertex(vPoint);
+        }
+
 
         const map<KeyFrame*,size_t> observations = pMP->GetObservations();
 
@@ -838,7 +858,10 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         VSim3->setMarginalized(false);
         VSim3->_fix_scale = bFixScale;
 
-        optimizer.addVertex(VSim3);
+        if (!optimizer.vertex(VSim3->id()))
+        {
+            optimizer.addVertex(VSim3);
+        }
 
         vpVertices[nIDi]=VSim3;
     }
@@ -1079,7 +1102,10 @@ int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &
     vSim3->_principle_point2[1] = K2.at<float>(1,2);
     vSim3->_focal_length2[0] = K2.at<float>(0,0);
     vSim3->_focal_length2[1] = K2.at<float>(1,1);
-    optimizer.addVertex(vSim3);
+    if (!optimizer.vertex(vSim3->id()))
+    {
+        optimizer.addVertex(vSim3);
+    }
 
     // Set MapPoint vertices
     const int N = vpMatches1.size();
@@ -1119,7 +1145,10 @@ int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &
                 vPoint1->setEstimate(Converter::toVector3d(P3D1c));
                 vPoint1->setId(id1);
                 vPoint1->setFixed(true);
-                optimizer.addVertex(vPoint1);
+                if (!optimizer.vertex(vPoint1->id()))
+                {
+                    optimizer.addVertex(vPoint1);
+                }
 
                 g2o::VertexSBAPointXYZ* vPoint2 = new g2o::VertexSBAPointXYZ();
                 cv::Mat P3D2w = pMP2->GetWorldPos();
@@ -1127,7 +1156,10 @@ int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &
                 vPoint2->setEstimate(Converter::toVector3d(P3D2c));
                 vPoint2->setId(id2);
                 vPoint2->setFixed(true);
-                optimizer.addVertex(vPoint2);
+                if (!optimizer.vertex(vPoint2->id()))
+                {
+                    optimizer.addVertex(vPoint2);
+                }
             }
             else
                 continue;

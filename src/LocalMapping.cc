@@ -563,10 +563,6 @@ void LocalMapping::RequestStop()
 bool LocalMapping::Stop()
 {
     unique_lock<mutex> lock(mMutexStop);
-    if (mbStopRequested)
-    {
-        cout << mbStopRequested << " " << mbNotStop << endl;
-    }
 
     if(mbStopRequested && !mbNotStop)
     {

@@ -497,9 +497,7 @@ void logSim3(ofstream &ostream, int sourceIdx, int targetIdx, KeyFrame *parentKF
 
 void MultiLoopClosing::CorrectLoop()
 {
-    // cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
-    cout << activeLoopState->sourceIdx << " -> " << activeLoopState->targetIdx << endl;
-    // return;
+     cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
 
     System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
 
@@ -542,6 +540,7 @@ void MultiLoopClosing::CorrectLoop()
         // Get Map Mutex
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
+        // Log Global Bundle Adjustments
         // ofstream outfile("/home/ahollenbach/data/results/gba/gba.log", ios::app);
         // if(!outfile.is_open())
         //     cout << "Couldn't open log file!!" << endl;
