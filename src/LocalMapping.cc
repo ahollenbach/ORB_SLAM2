@@ -567,7 +567,7 @@ bool LocalMapping::Stop()
     if(mbStopRequested && !mbNotStop)
     {
         mbStopped = true;
-        cout << "Local Mapping STOP" << endl;
+        cout << "[client-" << mpLoopCloser->rosContainer->GetSystemId() << "] " << "Local Mapping STOP" << endl;
         return true;
     }
 
@@ -598,7 +598,7 @@ void LocalMapping::Release()
     //     delete *lit;
     // mlNewKeyFrames.clear();
 
-    cout << "Local Mapping RELEASE" << endl;
+    cout << "[client-" << mpLoopCloser->rosContainer->GetSystemId() << "] " << "Local Mapping RELEASE" << endl;
 }
 
 bool LocalMapping::AcceptKeyFrames()

@@ -147,6 +147,10 @@ public:
     // Local Mapper. It manages the local map and performs local bundle adjustment.
     LocalMapping* mpLocalMapper;
 
+    // Tracking cross-system map collaboration counts in Multi SLAM
+    // Hardcoded because my cpp sucks
+    int collaborationCounts[6];
+
 
 private:
     // Used for unique identification when multiple systems are running

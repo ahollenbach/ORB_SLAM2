@@ -42,7 +42,8 @@ ORBVocabulary* System::mpVocabulary = new ORBVocabulary();
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer,
                int systemId, int meta_run_num, int num_clients):systemId(systemId),mSensor(sensor),mbReset(false),mbActivateLocalizationMode(false),
-                                 mbDeactivateLocalizationMode(false), metaRunNum(meta_run_num), numClients(num_clients)
+                                 mbDeactivateLocalizationMode(false), metaRunNum(meta_run_num), numClients(num_clients),
+                                 collaborationCounts{}
 {
     // Output welcome message
     cout << endl <<
@@ -67,7 +68,6 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
        cerr << "Failed to open settings file at: " << strSettingsFile << endl;
        exit(-1);
     }
-
 
     //Load ORB Vocabulary
     if(mpVocabulary->empty())
@@ -304,11 +304,19 @@ void System::Shutdown()
         usleep(5000);
     }
 
+    cout << "[client-" << this->GetSystemId() << "] "  << "Current links: " ;
+    auto array_length = end(collaborationCounts) - begin(collaborationCounts);
+    for(int i =0; i<array_length; i++)
+    {
+        cout << collaborationCounts[i] << " ";
+    }
+    cout << endl;
+
     pangolin::BindToContext("ORB-SLAM2: Map Viewer");
 }
 
 void System::SaveTrajectoryTUM(const string &filename) {
-    cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
+    cout << "[client-" << this->GetSystemId() << "] "  << "Saving camera trajectory to " << filename << " ...";
 
     vector<KeyFrame *> vpKFs = mpMap->GetAllKeyFrames();
     sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
@@ -357,12 +365,12 @@ void System::SaveTrajectoryTUM(const string &filename) {
           << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
     }
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout << " done!" << endl;
 }
 
 void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 {
-    cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
+    cout << "[client-" << this->GetSystemId() << "] "  << "Saving keyframe trajectory to " << filename << " ...";
 
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
@@ -393,12 +401,12 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     }
 
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout << " done!" << endl;
 }
 
 void System::SaveTrajectoryKITTI(const string &filename)
 {
-    cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
+    cout << "[client-" << this->GetSystemId() << "] "  << "Saving camera trajectory to " << filename << " ...";
 
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
@@ -443,7 +451,7 @@ void System::SaveTrajectoryKITTI(const string &filename)
              Rwc.at<float>(2,0) << " " << Rwc.at<float>(2,1)  << " " << Rwc.at<float>(2,2) << " "  << twc.at<float>(2) << endl;
     }
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout <<" done!" << endl;
 }
 
 const vector<MapPoint*> System::GetPoints()

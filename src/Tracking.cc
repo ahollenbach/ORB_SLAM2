@@ -473,7 +473,7 @@ void Tracking::Track()
         {
             if(mpMap->KeyFramesInMap()<=5)
             {
-                cout << "Track lost soon after initialisation, reseting..." << endl;
+                cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Track lost soon after initialisation, reseting..." << endl;
                 mpSystem->Reset();
                 return;
             }
@@ -537,7 +537,7 @@ void Tracking::StereoInitialization()
             }
         }
 
-        cout << "New map created with " << mpMap->MapPointsInMap() << " points" << endl;
+        cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "New map created with " << mpMap->MapPointsInMap() << " points" << endl;
 
         mpLocalMapper->InsertKeyFrame(pKFini);
 
@@ -681,7 +681,7 @@ void Tracking::CreateInitialMapMonocular()
     pKFcur->UpdateConnections();
 
     // Bundle Adjustment
-    cout << "New Map created with " << mpMap->MapPointsInMap() << " points" << endl;
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "New Map created with " << mpMap->MapPointsInMap() << " points" << endl;
 
     Optimizer::GlobalBundleAdjustemnt(mpMap,20);
 
@@ -691,7 +691,7 @@ void Tracking::CreateInitialMapMonocular()
 
     if(medianDepth<0 || pKFcur->TrackedMapPoints(1)<100)
     {
-        cout << "Wrong initialization, reseting..." << endl;
+        cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Wrong initialization, reseting..." << endl;
         Reset();
         return;
     }
@@ -1528,7 +1528,7 @@ bool Tracking::Relocalization(bool requestCrossThread)
     else
     {
         if(requestCrossThread)
-            cout << "Relocalized from another thread" << endl;
+            cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Relocalized from another thread" << endl;
         mnLastRelocFrameId = mCurrentFrame.mnId;
         return true;
     }
@@ -1537,26 +1537,34 @@ bool Tracking::Relocalization(bool requestCrossThread)
 
 void Tracking::Reset()
 {
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Requesting system reset. Current links: " ;
+    auto array_length = end(mpSystem->collaborationCounts) - begin(mpSystem->collaborationCounts);
+    for(int i =0; i<array_length; i++)
+    {
+        cout << mpSystem->collaborationCounts[i] << " ";
+    }
+    cout << endl;
+
     mpViewer->RequestStop();
 
-    cout << "System Reseting" << endl;
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "System Reseting" << endl;
 
     // For now, just don't worry about viewer not being stopped.
 //    while(!mpViewer->isStopped())
 //        usleep(3000);
 
     // Reset Local Mapping
-    cout << "Reseting Local Mapper...";
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Reseting Local Mapper...";
     mpLocalMapper->RequestReset();
     cout << " done" << endl;
 
     // Reset Loop Closing
-    cout << "Reseting Loop Closing...";
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Reseting Loop Closing...";
     mpLoopClosing->RequestReset();
     cout << " done" << endl;
 
     // Clear BoW Database
-    cout << "Reseting Database...";
+    cout << "[client-" << this->rosContainer->GetSystemId() << "] "  << "Reseting Database...";
     mpKeyFrameDB->clear();
     cout << " done" << endl;
 

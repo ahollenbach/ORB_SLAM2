@@ -150,7 +150,7 @@ bool MultiLoopClosing::DetectLoop()
         {
             continue;
         }
-        // TODO return array of loops to handle correctly
+        // TODO return array of loops to handle correctly - returning t/f means that if multiple detect each other, they might get lost
         if(DetectLoop(sourceSystemIdx, targetIdx))
         {
             return true;
@@ -497,9 +497,14 @@ void logSim3(ofstream &ostream, int sourceIdx, int targetIdx, KeyFrame *parentKF
 
 void MultiLoopClosing::CorrectLoop()
 {
-     cout << "Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
+     cout << "[mlc] Correcting loop " << activeLoopState->sourceIdx << " to match " << activeLoopState->targetIdx << endl;
 
     System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
+    System* targetSystem = mpSystems[activeLoopState->targetIdx];
+
+    // Mark the systems as having a dependency
+    systemToCorrect->collaborationCounts[activeLoopState->targetIdx] += 1;
+    targetSystem->collaborationCounts[activeLoopState->sourceIdx] += 1;  // Disingenuous - but just trying to debug links
 
     // Send a stop signal to Local Mapping
     // Avoid new keyframes are inserted while correcting the loop
@@ -518,12 +523,11 @@ void MultiLoopClosing::CorrectLoop()
     }
 
     // Wait until Local Mapping has effectively stopped
-    cout << activeLoopState->sourceIdx << " starting to wait" << endl;
+    cout << "[mlc] Requesting client-" << activeLoopState->sourceIdx << " stop local mapping" << endl;
     while(!systemToCorrect->mpLocalMapper->isStopped())
     {
         usleep(1000);
     }
-    cout << activeLoopState->sourceIdx << " done waiting" << endl;
 
     // Ensure current keyframe is updated
     mpCurrentKF->UpdateConnections();
@@ -541,44 +545,56 @@ void MultiLoopClosing::CorrectLoop()
         unique_lock<mutex> lock(systemToCorrect->mpMap->mMutexMapUpdate);
 
         // Log Global Bundle Adjustments
-        // ofstream outfile("/home/ahollenbach/data/results/gba/gba.log", ios::app);
-        // if(!outfile.is_open())
-        //     cout << "Couldn't open log file!!" << endl;
-        // if(GBA_RUN_NUM == 0)
-        // {
-        //     timeval curTime;
-        //     gettimeofday(&curTime, NULL);
-        //     long int ms = curTime.tv_sec * 1000 + curTime.tv_usec / 1000;
-        //     outfile << "------------------ " << ms << " ------------------" << endl;
-        // }
+        bool gbaLoggingEnabled = false;  // Disabled!
+        ofstream outfile;  // TODO: Not actually tested whether the local outfile will set this outfile if enabled
+        if (gbaLoggingEnabled)
+        {
+            ofstream outfile("/home/ahollenbach/data/results/gba/gba.log", ios::app);
+            if (!outfile.is_open())
+                cout << "Couldn't open log file!!" << endl;
+            if (GBA_RUN_NUM == 0)
+            {
+                timeval curTime;
+                gettimeofday(&curTime, NULL);
+                long int ms = curTime.tv_sec * 1000 + curTime.tv_usec / 1000;
+                outfile << "------------------ " << ms << " ------------------" << endl;
+            }
+        }
 
         vector<KeyFrame*> allKFs = mpSystems[activeLoopState->sourceIdx]->mpMap->GetAllKeyFrames();
         for(vector<KeyFrame*>::iterator vit=allKFs.begin(), vend=allKFs.end(); vit!=vend; vit++)
         {
-            KeyFrame* pKFi = *vit;
+            KeyFrame *pKFi = *vit;
 
             cv::Mat Tiw = pKFi->GetPose();
 
-            if(pKFi!=mpCurrentKF)
+            if (pKFi != mpCurrentKF)
             {
-                cv::Mat Tic = Tiw*Twc;
-                cv::Mat Ric = Tic.rowRange(0,3).colRange(0,3);
-                cv::Mat tic = Tic.rowRange(0,3).col(3);
-                g2o::Sim3 g2oSic(Converter::toMatrix3d(Ric),Converter::toVector3d(tic),1.0);
-                g2o::Sim3 g2oCorrectedSiw = g2oSic*mg2oScw;
+                cv::Mat Tic = Tiw * Twc;
+                cv::Mat Ric = Tic.rowRange(0, 3).colRange(0, 3);
+                cv::Mat tic = Tic.rowRange(0, 3).col(3);
+                g2o::Sim3 g2oSic(Converter::toMatrix3d(Ric), Converter::toVector3d(tic), 1.0);
+                g2o::Sim3 g2oCorrectedSiw = g2oSic * mg2oScw;
                 //Pose corrected with the Sim3 of the loop closure
-                CorrectedSim3[pKFi]=g2oCorrectedSiw;
+                CorrectedSim3[pKFi] = g2oCorrectedSiw;
             }
 
-            cv::Mat Riw = Tiw.rowRange(0,3).colRange(0,3);
-            cv::Mat tiw = Tiw.rowRange(0,3).col(3);
-            g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw),Converter::toVector3d(tiw),1.0);
+            cv::Mat Riw = Tiw.rowRange(0, 3).colRange(0, 3);
+            cv::Mat tiw = Tiw.rowRange(0, 3).col(3);
+            g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw), Converter::toVector3d(tiw), 1.0);
             //Pose without correction
-            NonCorrectedSim3[pKFi]=g2oSiw;
-            // g2o::Sim3 diff = CorrectedSim3[pKFi] - NonCorrectedSim3[pKFi];
-            // logSim3(outfile, activeLoopState->sourceIdx, activeLoopState->targetIdx, mpCurrentKF, pKFi, &CorrectedSim3[pKFi], &NonCorrectedSim3[pKFi]);
+            NonCorrectedSim3[pKFi] = g2oSiw;
+            if (gbaLoggingEnabled)
+            {
+                g2o::Sim3 diff = CorrectedSim3[pKFi] - NonCorrectedSim3[pKFi];
+                logSim3(outfile, activeLoopState->sourceIdx, activeLoopState->targetIdx, mpCurrentKF, pKFi,
+                        &CorrectedSim3[pKFi], &NonCorrectedSim3[pKFi]);
+            }
         }
-        // outfile.close();
+        if (gbaLoggingEnabled && outfile != NULL)
+        {
+            outfile.close();
+        }
 
         // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
         for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)
@@ -633,24 +649,28 @@ void MultiLoopClosing::CorrectLoop()
         }
         GBA_RUN_NUM++;
 
-//        // Start Loop Fusion
-//        // Update matched map points and replace if duplicated
-//        for(std::size_t i=0; i<mvpCurrentMatchedPoints.size(); i++)
-//        {
-//            if(mvpCurrentMatchedPoints[i])
-//            {
-//                MapPoint* pLoopMP = mvpCurrentMatchedPoints[i];
-//                MapPoint* pCurMP = mpCurrentKF->GetMapPoint(i);
-//                if(pCurMP)
-//                    pCurMP->Replace(pLoopMP);
-//                else
-//                {
-//                    mpCurrentKF->AddMapPoint(pLoopMP,i);
-//                    pLoopMP->AddObservation(mpCurrentKF,i);
-//                    pLoopMP->ComputeDistinctiveDescriptors();
-//                }
-//            }
-//        }
+        // Start Loop Fusion
+        // Update matched map points and replace if duplicated
+        bool shouldFuseLoops = false;
+        if (shouldFuseLoops)
+        {
+            for (std::size_t i = 0; i < activeLoopState->mvpCurrentMatchedPoints.size(); i++)
+            {
+                if (activeLoopState->mvpCurrentMatchedPoints[i])
+                {
+                    MapPoint *pLoopMP = activeLoopState->mvpCurrentMatchedPoints[i];
+                    MapPoint *pCurMP = mpCurrentKF->GetMapPoint(i);
+                    if (pCurMP)
+                        pCurMP->Replace(pLoopMP);
+                    else
+                    {
+                        mpCurrentKF->AddMapPoint(pLoopMP, i);
+                        pLoopMP->AddObservation(mpCurrentKF, i);
+                        pLoopMP->ComputeDistinctiveDescriptors();
+                    }
+                }
+            }
+        }
 
         // This part is to figure out how many potential merges were made/turn them red in the UI
         /////////////////////////// QUERY ALL //////////////////////////////////////
@@ -745,7 +765,7 @@ void MultiLoopClosing::CorrectLoop()
     // Loop closed. Release Local Mapping.
     systemToCorrect->mpLocalMapper->Release();
 
-    cout << "MultiLoop Closed!" << endl;
+    cout << "[mlc] MultiLoop Closed!" << endl;
 
     activeLoopState->mLastLoopKFid = mpCurrentKF->localId;
 }
@@ -831,7 +851,7 @@ void MultiLoopClosing::ResetIfRequested()
 
 void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 {
-    cout << "Starting Global Bundle Adjustment" << endl;
+    cout << "[mlc] Starting Global Bundle Adjustment" << endl;
 
     System* systemToCorrect = mpSystems[activeLoopState->sourceIdx];
 
@@ -847,8 +867,8 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
         if(!mbStopGBA)
         {
-            cout << "Global Bundle Adjustment finished" << endl;
-            cout << "Updating map ..." << endl;
+            cout << "[mlc] Global Bundle Adjustment finished" << endl;
+            cout << "[mlc] Updating map ..." << endl;
 
             // Wait until Local Mapping has effectively stopped
             systemToCorrect->mpLocalMapper->RequestStop();
@@ -929,7 +949,7 @@ void MultiLoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
 
             systemToCorrect->mpLocalMapper->Release();
 
-            cout << "Map updated!" << endl;
+            cout << "[mlc] Map updated!" << endl;
         }
 
         mbFinishedGBA = true;

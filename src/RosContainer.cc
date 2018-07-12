@@ -113,4 +113,9 @@ void RosContainer::NotifyStateChange(int state)
     stateChangePublisher.publish(state);
 }
 
+int RosContainer::GetSystemId()
+{
+    return this->systemId;
+}
+
 }
